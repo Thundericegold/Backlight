@@ -1,9 +1,14 @@
 package com.example.backlight.activitys;
 
+import android.Manifest;
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
+import android.provider.MediaStore;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.ListView;
@@ -12,6 +17,7 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
 
 import com.example.backlight.R;
@@ -20,6 +26,10 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -72,10 +82,18 @@ public class MarqueeListActivity extends AppCompatActivity {
                                 adjustSpeed(position);
                                 break;
                             case 3:
-                                openGifFile(names.get(position));
+                                if (ensureReadPermission()) {
+                                    openGifFile(names.get(position));
+                                } else {
+                                    Toast.makeText(this, "无读取图片权限", Toast.LENGTH_SHORT).show();
+                                }
                                 break;
                             case 4:
-                                shareGifFile(names.get(position));
+                                if (ensureReadPermission()) {
+                                    shareGifFile(names.get(position));
+                                } else {
+                                    Toast.makeText(this, "无读取图片权限", Toast.LENGTH_SHORT).show();
+                                }
                                 break;
                         }
                     }).show();
@@ -188,7 +206,7 @@ public class MarqueeListActivity extends AppCompatActivity {
                 .show();
     }
 
-    /** 打开对应GIF */
+    /** 打开对应GIF（已兼容 Android 10+ Scoped Storage） */
     private void openGifFile(String name) {
         File gifFile = findGifFile(name);
         if (gifFile != null && gifFile.exists()) {
@@ -211,7 +229,7 @@ public class MarqueeListActivity extends AppCompatActivity {
         }
     }
 
-    /** 分享对应GIF */
+    /** 分享对应GIF（已兼容 Android 10+ Scoped Storage） */
     private void shareGifFile(String name) {
         File gifFile = findGifFile(name);
         if (gifFile != null && gifFile.exists()) {
@@ -235,11 +253,78 @@ public class MarqueeListActivity extends AppCompatActivity {
         }
     }
 
-    /** 查找GIF文件 */
+    /** 查找 GIF 文件（兼容 Android 6~13+） **/
     private File findGifFile(String name) {
-        File picturesDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_PICTURES);
-        return new File(picturesDir, name + ".gif");
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            // Android 10+ 用 MediaStore 查询
+            try (Cursor cursor = getContentResolver().query(
+                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                    new String[]{MediaStore.Images.Media._ID, MediaStore.Images.Media.DISPLAY_NAME},
+                    MediaStore.Images.Media.DISPLAY_NAME + "=?",
+                    new String[]{name + ".gif"},
+                    null
+            )) {
+                if (cursor != null && cursor.moveToFirst()) {
+                    // Android 10+ 读取绝对路径
+                    int id = cursor.getInt(cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID));
+                    Uri contentUri = Uri.withAppendedPath(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, String.valueOf(id));
+                    return new File(getRealPathFromUri(contentUri)); // getRealPathFromUri 方法要适配
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            return null;
+        } else {
+            // Android 6~9 用旧目录
+            File picturesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
+            return new File(picturesDir, name + ".gif");
+        }
     }
+
+    /** 从 contentUri 获取真实文件路径（兼容 Android 6~13+） **/
+    private String getRealPathFromUri(Uri uri) {
+        String filePath = null;
+        // 查询 MediaStore 数据库
+        try (Cursor cursor = getContentResolver().query(
+                uri,
+                new String[]{MediaStore.Images.Media.DATA}, // 旧字段，在 Android Q 已弃用但有的机型还返回
+                null,
+                null,
+                null
+        )) {
+            if (cursor != null && cursor.moveToFirst()) {
+                int idx = cursor.getColumnIndex(MediaStore.Images.Media.DATA);
+                if (idx != -1) {
+                    filePath = cursor.getString(idx);
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        // 如果 filePath 是 null，用更通用的方法尝试打开
+        if (filePath == null) {
+            try {
+                // 把 Uri 里的内容复制到临时文件，这样也能用 FileProvider 共享
+                File tempFile = new File(getCacheDir(), System.currentTimeMillis() + ".gif");
+                try (InputStream in = getContentResolver().openInputStream(uri);
+                     OutputStream out = new FileOutputStream(tempFile)) {
+                    byte[] buf = new byte[4096];
+                    int len;
+                    while ((len = in.read(buf)) > 0) {
+                        out.write(buf, 0, len);
+                    }
+                }
+                filePath = tempFile.getAbsolutePath();
+            } catch (IOException io) {
+                io.printStackTrace();
+            }
+        }
+
+        return filePath;
+    }
+
+
 
     /** 保存修改到SP */
     private void saveChanges() {
@@ -255,6 +340,18 @@ public class MarqueeListActivity extends AppCompatActivity {
         } catch (Exception e) {
             e.printStackTrace();
         }
+    }
+
+    /** 权限检查方法 */
+    private boolean ensureReadPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            return ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_IMAGES)
+                    == PackageManager.PERMISSION_GRANTED;
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            return ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE)
+                    == PackageManager.PERMISSION_GRANTED;
+        }
+        return true;
     }
 
     @Override

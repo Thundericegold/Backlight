@@ -2,15 +2,18 @@ package com.example.backlight;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
+import android.content.ContentValues;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
+import android.provider.MediaStore;
 import android.text.InputFilter;
 import android.view.MotionEvent;
 import android.widget.Button;
@@ -40,6 +43,7 @@ import org.json.JSONObject;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
@@ -165,6 +169,39 @@ public class MainActivity extends BaseActivity {
         });
     }
 
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
+        setContentView(R.layout.activity_main);
+
+// 初始化权限请求器
+        permissionLauncher = registerForActivityResult(
+                new ActivityResultContracts.RequestPermission(),
+                isGranted -> {
+                    if (!isGranted) {
+                        Toast.makeText(this, "缺少存储权限，无法保存", Toast.LENGTH_SHORT).show();
+                    }
+                });
+
+        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
+            Insets sysBarsInsets = insets.getInsets(WindowInsetsCompat.Type.systemBars());
+            int orientation = getResources().getConfiguration().orientation;
+            if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
+                v.setPadding(sysBarsInsets.left, 0, sysBarsInsets.right, 0);
+            } else {
+                v.setPadding(0, sysBarsInsets.top, 0, sysBarsInsets.bottom);
+            }
+            return insets;
+        });
+
+        initView();
+        initListener();
+        previewView.setAsPreviewOf(drawView);
+        previewView.setMode(PixelDrawView.MODE_DRAW);
+        previewView.clearDots();
+    }
+
     private void showTextInputDialog() {
         AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
         builder.setTitle("输入文字及大小（最多20字符）");
@@ -225,13 +262,14 @@ public class MainActivity extends BaseActivity {
                 Toast.makeText(this, "名称不能为空", Toast.LENGTH_SHORT).show();
                 return;
             }
-            btnSaveMarquee.setEnabled(false); // 禁用按钮防止重复点击
+            btnSaveMarquee.setEnabled(false);
             saveMarqueeAsGif(saveName);
         });
         builder.setNegativeButton("取消", (dialog, w) -> dialog.dismiss());
         builder.show();
     }
 
+    /** 保存 GIF (已适配 Android 6 ~ 13+) **/
     private void saveMarqueeAsGif(String saveName) {
         try {
             JSONObject jsonObj = new JSONObject();
@@ -269,44 +307,69 @@ public class MainActivity extends BaseActivity {
             }
 
             jsonObj.put("frames", framesArray);
-
-            // 保存 JSON
             String existing = sharedPreferences.getString("saved_marquee_list", "[]");
             JSONArray listArray = new JSONArray(existing);
             listArray.put(jsonObj);
             editor.putString("saved_marquee_list", listArray.toString());
             editor.apply();
 
-            // 生成 GIF
-            File gifDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
-            if (!gifDir.exists()) gifDir.mkdirs();
-            File gifFile = new File(gifDir, saveName + ".gif");
-
-            AnimatedGifEncoder gifEncoder = new AnimatedGifEncoder();
-            try (FileOutputStream gifOut = new FileOutputStream(gifFile)) {
-                gifEncoder.start(gifOut);
-                gifEncoder.setRepeat(0);
-                gifEncoder.setDelay(250);
-                for (Bitmap frameBmp : gifFrames) {
-                    gifEncoder.addFrame(frameBmp);
-                    frameBmp.recycle(); // 回收节省内存
-                }
-                gifEncoder.finish();
+            OutputStream gifOut;
+            String saveLocation;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                ContentValues values = new ContentValues();
+                values.put(MediaStore.Images.Media.DISPLAY_NAME, saveName + ".gif");
+                values.put(MediaStore.Images.Media.MIME_TYPE, "image/gif");
+                values.put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES);
+                Uri uri = getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
+                gifOut = getContentResolver().openOutputStream(uri);
+                saveLocation = uri.toString();
+            } else {
+                File gifDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
+                if (!gifDir.exists()) gifDir.mkdirs();
+                File gifFile = new File(gifDir, saveName + ".gif");
+                gifOut = new FileOutputStream(gifFile);
+                saveLocation = gifFile.getAbsolutePath();
             }
 
-            android.media.MediaScannerConnection.scanFile(this,
-                    new String[]{gifFile.getAbsolutePath()},
-                    new String[]{"image/gif"}, null);
+            AnimatedGifEncoder gifEncoder = new AnimatedGifEncoder();
+            gifEncoder.start(gifOut);
+            gifEncoder.setRepeat(0);
+            gifEncoder.setDelay(250);
+            for (Bitmap frameBmp : gifFrames) {
+                gifEncoder.addFrame(frameBmp);
+                frameBmp.recycle();
+            }
+            gifEncoder.finish();
+            gifOut.close();
 
-            Toast.makeText(this, "保存成功，GIF已生成：" + gifFile.getAbsolutePath(), Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "保存成功：" + saveLocation, Toast.LENGTH_LONG).show();
         } catch (JSONException | IOException e) {
             e.printStackTrace();
             Toast.makeText(this, "保存失败", Toast.LENGTH_SHORT).show();
         } finally {
-            btnSaveMarquee.setEnabled(true); // 恢复按钮
+            btnSaveMarquee.setEnabled(true);
         }
     }
 
+    /** 新权限申请逻辑 **/
+    private void checkStoragePermission(Runnable onGranted) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_IMAGES)
+                    != PackageManager.PERMISSION_GRANTED) {
+                permissionLauncher.launch(Manifest.permission.READ_MEDIA_IMAGES);
+                return;
+            }
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                    != PackageManager.PERMISSION_GRANTED) {
+                permissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE);
+                return;
+            }
+        }
+        onGranted.run();
+    }
+
+    /** 启动定时动画执行 **/
     private void startAnimation(Runnable action, int intervalMs) {
         animTask = new Runnable() {
             @Override
@@ -318,6 +381,7 @@ public class MainActivity extends BaseActivity {
         animHandler.post(animTask);
     }
 
+    /** 停止动画 **/
     private void stopAnimation(Button btn, String defaultText) {
         animHandler.removeCallbacks(animTask);
         isAnimRunning = false;
@@ -325,77 +389,4 @@ public class MainActivity extends BaseActivity {
         previewView.resetOffset();
     }
 
-    private void checkStoragePermission(Runnable onGranted) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
-                    != PackageManager.PERMISSION_GRANTED) {
-                permissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE);
-                return;
-            }
-        }
-        onGranted.run();
-    }
-
-    @Override
-    protected void onSaveInstanceState(Bundle outState) {
-        super.onSaveInstanceState(outState);
-        outState.putSerializable("drawStates", (Serializable) drawView.getDotStatesCopy());
-        outState.putSerializable("fullTextStates", (Serializable) previewView.getFullTextStatesCopy());
-    }
-
-    @Override
-    protected void onRestoreInstanceState(Bundle savedInstanceState) {
-        super.onRestoreInstanceState(savedInstanceState);
-        if (savedInstanceState != null) {
-            int[][] drawStates = (int[][]) savedInstanceState.getSerializable("drawStates");
-            if (drawStates != null) {
-                drawView.setFrameData(drawStates);
-            }
-            int[][] fullTextStates = (int[][]) savedInstanceState.getSerializable("fullTextStates");
-            if (fullTextStates != null) {
-                previewView.setFrameData(fullTextStates);
-            }
-            previewView.setAsPreviewOf(drawView);
-            previewView.syncFromLinkedDrawView();
-        }
-    }
-
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
-        setContentView(R.layout.activity_main);
-
-        // 初始化权限请求器
-        permissionLauncher = registerForActivityResult(
-                new ActivityResultContracts.RequestPermission(),
-                isGranted -> {
-                    if (!isGranted) {
-                        Toast.makeText(this, "缺少存储权限，无法保存", Toast.LENGTH_SHORT).show();
-                    }
-                });
-
-        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
-            Insets sysBarsInsets = insets.getInsets(WindowInsetsCompat.Type.systemBars());
-            int orientation = getResources().getConfiguration().orientation;
-            if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
-                v.setPadding(sysBarsInsets.left, 0, sysBarsInsets.right, 0);
-            } else {
-                v.setPadding(0, sysBarsInsets.top, 0, sysBarsInsets.bottom);
-            }
-            return insets;
-        });
-
-        initView();
-        initListener();
-        previewView.setAsPreviewOf(drawView);
-        previewView.setMode(PixelDrawView.MODE_DRAW);
-        previewView.clearDots();
-    }
-
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        animHandler.removeCallbacksAndMessages(null); // 清理动画任务
-    }
 }

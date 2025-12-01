@@ -1,13 +1,17 @@
 package com.example.backlight.activitys;
 
 import android.annotation.SuppressLint;
+import android.content.ContentValues;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.net.Uri;
+import android.os.Build;
 import android.os.Environment;
 import android.os.Handler;
+import android.provider.MediaStore;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.View;
@@ -15,6 +19,7 @@ import android.view.View;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.util.List;
 
 public class PixelDrawView extends View {
@@ -39,7 +44,7 @@ public class PixelDrawView extends View {
     private Paint blackPaint;
     private Paint whitePaint;
     private Paint bgPaint;
-    private Paint whiteBgPaint; // 新增白底画笔
+    private Paint whiteBgPaint;
 
     private int mode = MODE_DRAW;
     private boolean editable = true;
@@ -49,7 +54,6 @@ public class PixelDrawView extends View {
     private int previewOffsetX = 0;
     private float previewRotateDegree = 0f;
 
-    // 动画播放控制
     private Handler playHandler;
     private Runnable playRunnable;
 
@@ -60,10 +64,10 @@ public class PixelDrawView extends View {
         dotStates = new int[rows][cols];
 
         whiteBgPaint = new Paint();
-        whiteBgPaint.setColor(Color.WHITE); // 白色背景
+        whiteBgPaint.setColor(Color.WHITE);
 
         bgPaint = new Paint();
-        bgPaint.setColor(Color.GRAY); // 灰色点阵背景
+        bgPaint.setColor(Color.GRAY);
 
         blackPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         blackPaint.setColor(Color.BLACK);
@@ -90,16 +94,12 @@ public class PixelDrawView extends View {
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
-
-        // 1. 整个View背景为白色
         canvas.drawRect(0, 0, getWidth(), getHeight(), whiteBgPaint);
 
-        // 2. 仅点阵区域绘制为灰色背景
         float gridWidth = cellSize * cols;
         float gridHeight = cellSize * rows;
         canvas.drawRect(0, 0, gridWidth, gridHeight, bgPaint);
 
-        // 3. 决定绘制数据源
         int[][] srcData;
         int srcCols;
         if (isPreview && fullTextStates != null) {
@@ -110,12 +110,10 @@ public class PixelDrawView extends View {
             srcCols = cols;
         }
 
-        // 4. 处理旋转
         if (previewRotateDegree != 0f) {
             srcData = getRotatedStates(srcData, srcCols, previewRotateDegree);
         }
 
-        // 5. 绘制点
         for (int r = 0; r < rows; r++) {
             for (int c = 0; c < cols; c++) {
                 int srcCol;
@@ -222,7 +220,6 @@ public class PixelDrawView extends View {
         invalidate();
     }
 
-    public int[][] getDotStates() { return dotStates; }
     public void setEditable(boolean e) { editable = e; }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -240,6 +237,21 @@ public class PixelDrawView extends View {
             return true;
         });
     }
+
+    /** 获取当前点阵状态（直接引用） **/
+    public int[][] getDotStates() {
+        return dotStates;
+    }
+
+    /** 获取当前点阵状态的副本 **/
+    public int[][] getDotStatesCopy() {
+        int[][] copy = new int[dotStates.length][];
+        for (int i = 0; i < dotStates.length; i++) {
+            copy[i] = dotStates[i].clone();
+        }
+        return copy;
+    }
+
 
     public void scrollLeft() {
         if (!isPreview) return;
@@ -268,61 +280,32 @@ public class PixelDrawView extends View {
         invalidate();
     }
 
-    /** 保存仅点阵区域的图像 */
+    /** 新的保存图片方法，适配 Android 6 ~ 13+ **/
     @SuppressLint("WrongThread")
     public String saveToAlbum(Context ctx, String fileName) throws IOException {
-        int bmpWidth = (int)(cellSize * cols);
-        int bmpHeight = (int)(cellSize * rows);
-        Bitmap bmp = Bitmap.createBitmap(bmpWidth, bmpHeight, Bitmap.Config.ARGB_8888);
-        Canvas canvas = new Canvas(bmp);
+        Bitmap bmp = getBitmapCopy();
+        OutputStream outputStream;
+        String savedPath;
 
-        // 灰底
-        canvas.drawRect(0, 0, bmpWidth, bmpHeight, bgPaint);
-
-        int[][] srcData;
-        int srcCols;
-        if (isPreview && fullTextStates != null) {
-            srcData = fullTextStates;
-            srcCols = totalCols;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ContentValues values = new ContentValues();
+            values.put(MediaStore.Images.Media.DISPLAY_NAME, fileName);
+            values.put(MediaStore.Images.Media.MIME_TYPE, "image/png");
+            values.put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES);
+            Uri uri = ctx.getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
+            outputStream = ctx.getContentResolver().openOutputStream(uri);
+            savedPath = uri.toString();
         } else {
-            srcData = dotStates;
-            srcCols = cols;
+            File dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
+            if (!dir.exists()) dir.mkdirs();
+            File file = new File(dir, fileName);
+            outputStream = new FileOutputStream(file);
+            savedPath = file.getAbsolutePath();
         }
 
-        if (previewRotateDegree != 0f) {
-            srcData = getRotatedStates(srcData, srcCols, previewRotateDegree);
-        }
-
-        for (int r = 0; r < rows; r++) {
-            for (int c = 0; c < cols; c++) {
-                int srcCol;
-                if (isPreview && previewOffsetX != 0) {
-                    srcCol = (c + previewOffsetX) % srcCols;
-                } else if (isPreview && srcCols > cols) {
-                    srcCol = Math.min(displayStartCol + c, srcCols - 1);
-                } else {
-                    srcCol = c;
-                }
-                float cx = cellSize * (c + 0.5f);
-                float cy = cellSize * (r + 0.5f);
-                if (srcData[r][srcCol] == 0) {
-                    canvas.drawCircle(cx, cy, dotRadius, blackPaint);
-                } else {
-                    canvas.drawCircle(cx, cy, dotRadius, whitePaint);
-                }
-            }
-        }
-
-        File dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
-        if (!dir.exists()) dir.mkdirs();
-        File file = new File(dir, fileName);
-        try (FileOutputStream out = new FileOutputStream(file)) {
-            bmp.compress(Bitmap.CompressFormat.PNG, 100, out);
-        }
-        android.media.MediaScannerConnection.scanFile(ctx,
-                new String[]{file.getAbsolutePath()},
-                new String[]{"image/png"}, null);
-        return file.getAbsolutePath();
+        bmp.compress(Bitmap.CompressFormat.PNG, 100, outputStream);
+        outputStream.close();
+        return savedPath;
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -355,64 +338,12 @@ public class PixelDrawView extends View {
         return null;
     }
 
-    // 用于展示保存的帧
-    public void setFrameData(int[][] frame) {
-        this.dotStates = frame;
-        invalidate();
-    }
-
-    public void stopPlayingFrames() {
-        if (playHandler != null && playRunnable != null) {
-            playHandler.removeCallbacks(playRunnable);
-            playRunnable = null;
-        }
-    }
-
-    public void playFrames(List<int[][]> frames, int intervalMs) {
-        stopPlayingFrames();
-        playHandler = new Handler();
-        playRunnable = new Runnable() {
-            int index = 0;
-            @Override
-            public void run() {
-                setFrameData(frames.get(index));
-                index = (index + 1) % frames.size();
-                playHandler.postDelayed(this, intervalMs);
-            }
-        };
-        playHandler.post(playRunnable);
-    }
-
-    public int[][] getDotStatesCopy() {
-        int[][] copy = new int[dotStates.length][];
-        for (int i = 0; i < dotStates.length; i++) {
-            copy[i] = dotStates[i].clone();
-        }
-        return copy;
-    }
-
-    public void syncFromLinkedDrawView() {
-        if (linkedDrawView != null) {
-            this.dotStates = linkedDrawView.getDotStatesCopy();
-            this.fullTextStates = linkedDrawView.getFullTextStatesCopy();
-            this.totalCols = linkedDrawView.getTotalCols();
-            this.displayStartCol = linkedDrawView.displayStartCol;
-            invalidate();
-        }
-    }
     public Bitmap renderFrameToBitmap(int[][] frameData) {
-        // 灰底尺寸
         int bmpWidth = (int) (cellSize * cols);
         int bmpHeight = (int) (cellSize * rows);
-
-        // 创建只包含灰底区域的 Bitmap
         Bitmap bmp = Bitmap.createBitmap(bmpWidth, bmpHeight, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bmp);
-
-        // 灰色背景
         canvas.drawRect(0, 0, bmpWidth, bmpHeight, bgPaint);
-
-        // 绘制点阵
         for (int r = 0; r < rows; r++) {
             for (int c = 0; c < cols; c++) {
                 float cx = cellSize * (c + 0.5f);
@@ -424,23 +355,53 @@ public class PixelDrawView extends View {
                 }
             }
         }
-
         return bmp;
     }
 
-    /**
-     * 获取当前显示点阵的 Bitmap（只包含灰色点阵区域）
-     */
+    // 播放帧动画
+    public void playFrames(final List<int[][]> frames, final int intervalMs) {
+        if (frames == null || frames.isEmpty()) return;
+        stopPlayingFrames(); // 先停掉之前的
+        playHandler = new android.os.Handler();
+        final int[] index = {0};
+        playRunnable = new Runnable() {
+            @Override
+            public void run() {
+                if (index[0] >= frames.size()) {
+                    index[0] = 0;
+                }
+                int[][] frameData = frames.get(index[0]);
+                // 更新显示
+                for (int r = 0; r < rows; r++) {
+                    for (int c = 0; c < cols; c++) {
+                        dotStates[r][c] = frameData[r][c];
+                    }
+                }
+                invalidate();
+                index[0]++;
+                playHandler.postDelayed(this, intervalMs);
+            }
+        };
+        playHandler.post(playRunnable);
+    }
+
+    // 停止播放帧动画
+    public void stopPlayingFrames() {
+        if (playHandler != null && playRunnable != null) {
+            playHandler.removeCallbacks(playRunnable);
+            playRunnable = null;
+            playHandler = null;
+        }
+    }
+
+
     public Bitmap getBitmapCopy() {
         int bmpWidth = (int) (cellSize * cols);
         int bmpHeight = (int) (cellSize * rows);
         Bitmap bmp = Bitmap.createBitmap(bmpWidth, bmpHeight, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bmp);
-
-        // 灰色背景
         canvas.drawRect(0, 0, bmpWidth, bmpHeight, bgPaint);
 
-        // 决定绘制的数据源
         int[][] srcData;
         int srcCols;
         if (isPreview && fullTextStates != null) {
@@ -451,12 +412,10 @@ public class PixelDrawView extends View {
             srcCols = cols;
         }
 
-        // 是否旋转
         if (previewRotateDegree != 0f) {
             srcData = getRotatedStates(srcData, srcCols, previewRotateDegree);
         }
 
-        // 绘制当前点阵
         for (int r = 0; r < rows; r++) {
             for (int c = 0; c < cols; c++) {
                 int srcCol;
@@ -478,8 +437,4 @@ public class PixelDrawView extends View {
         }
         return bmp;
     }
-
-
-
-
 }
