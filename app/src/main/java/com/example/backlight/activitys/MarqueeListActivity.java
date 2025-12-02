@@ -11,15 +11,18 @@ import android.os.Environment;
 import android.provider.MediaStore;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
-import android.widget.ListView;
 import android.widget.EditText;
+import android.widget.ImageView;
+import android.widget.ListView;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AlertDialog;
-import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
 
+import com.bumptech.glide.Glide;
+import com.bumptech.glide.load.engine.DiskCacheStrategy;
 import com.example.backlight.R;
 
 import org.json.JSONArray;
@@ -33,34 +36,29 @@ import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
 
-public class MarqueeListActivity extends AppCompatActivity {
+public class MarqueeListActivity extends BaseActivity {
+
     private ListView listView;
     private PixelDrawView marqueePreview;
+    private Button btnRefresh;
     private List<JSONObject> savedEffects = new ArrayList<>();
-    private ArrayAdapter<String> adapter;
-    private List<String> names = new ArrayList<>();
+    private MarqueeAdapter adapter;
     private int playIntervalMs = 250; // 默认播放速度
 
     @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_marquee_list);
-
+    public void initView() {
         listView = findViewById(R.id.marqueeListView);
         marqueePreview = findViewById(R.id.marqueePreview);
-        Button btnRefresh = findViewById(R.id.btnRefresh);
+        btnRefresh = findViewById(R.id.btnRefresh);
+    }
 
+    @Override
+    public void initListener() {
         btnRefresh.setOnClickListener(v -> {
             loadSavedMarquee();
             adapter.notifyDataSetChanged();
             Toast.makeText(this, "已刷新", Toast.LENGTH_SHORT).show();
         });
-
-        loadSavedMarquee();
-
-        adapter = new ArrayAdapter<>(this,
-                android.R.layout.simple_list_item_1, names);
-        listView.setAdapter(adapter);
 
         // 单击播放
         listView.setOnItemClickListener((parent, view, position, id) -> playSelectedMarquee(position));
@@ -83,14 +81,14 @@ public class MarqueeListActivity extends AppCompatActivity {
                                 break;
                             case 3:
                                 if (ensureReadPermission()) {
-                                    openGifFile(names.get(position));
+                                    openGifFile(savedEffects.get(position).optString("name"));
                                 } else {
                                     Toast.makeText(this, "无读取图片权限", Toast.LENGTH_SHORT).show();
                                 }
                                 break;
                             case 4:
                                 if (ensureReadPermission()) {
-                                    shareGifFile(names.get(position));
+                                    shareGifFile(savedEffects.get(position).optString("name"));
                                 } else {
                                     Toast.makeText(this, "无读取图片权限", Toast.LENGTH_SHORT).show();
                                 }
@@ -101,18 +99,74 @@ public class MarqueeListActivity extends AppCompatActivity {
         });
     }
 
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_marquee_list);
+        initView();
+        initListener();
+        loadSavedMarquee();
+        adapter = new MarqueeAdapter(this, savedEffects);
+        listView.setAdapter(adapter);
+
+        // 如果 MainActivity 跳转时传了要播放的名称，就自动播放
+        String autoPlayName = getIntent().getStringExtra("play_on_open");
+        if (autoPlayName != null) {
+            for (int i = 0; i < savedEffects.size(); i++) {
+                if (autoPlayName.equals(savedEffects.get(i).optString("name"))) {
+                    int finalI = i;
+                    marqueePreview.post(() -> playSelectedMarquee(finalI));
+                    break;
+                }
+            }
+        }
+    }
+
+    /** 自定义Adapter：左边名称，右边GIF预览 **/
+    private class MarqueeAdapter extends ArrayAdapter<JSONObject> {
+        public MarqueeAdapter(MarqueeListActivity context, List<JSONObject> data) {
+            super(context, 0, data);
+        }
+
+        @Override
+        public android.view.View getView(int position, android.view.View convertView, android.view.ViewGroup parent) {
+            if (convertView == null) {
+                convertView = getLayoutInflater().inflate(R.layout.item_marquee, parent, false);
+            }
+            TextView tvName = convertView.findViewById(R.id.tvName);
+            ImageView imgGif = convertView.findViewById(R.id.imgGif);
+
+            JSONObject obj = getItem(position);
+            if (obj != null) {
+                String name = obj.optString("name", "未命名");
+                tvName.setText(name);
+
+                File gifFile = findGifFile(name);
+                if (gifFile != null && gifFile.exists()) {
+                    Glide.with(MarqueeListActivity.this)
+                            .asGif()
+                            .load(gifFile)
+                            .override(80, 80) // 缩略尺寸，减少内存占用
+                            .diskCacheStrategy(DiskCacheStrategy.ALL)
+                            .centerCrop()
+                            .into(imgGif);
+                } else {
+                    imgGif.setImageResource(android.R.color.transparent);
+                }
+            }
+            return convertView;
+        }
+    }
+
     /** 加载保存的跑马灯列表 */
     private void loadSavedMarquee() {
         try {
             String savedJson = getSharedPreferences(BaseActivity.SHARED_PREFERENCES_NAME, MODE_PRIVATE)
                     .getString("saved_marquee_list", "[]");
             JSONArray arr = new JSONArray(savedJson);
-            names.clear();
             savedEffects.clear();
             for (int i = 0; i < arr.length(); i++) {
-                JSONObject obj = arr.getJSONObject(i);
-                savedEffects.add(obj);
-                names.add(obj.optString("name", "未命名"));
+                savedEffects.add(arr.getJSONObject(i));
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -124,6 +178,10 @@ public class MarqueeListActivity extends AppCompatActivity {
         try {
             marqueePreview.stopPlayingFrames();
             JSONObject selected = savedEffects.get(position);
+            // 如果有保存速度，就用它
+            if (selected.has("speed")) {
+                playIntervalMs = selected.getInt("speed");
+            }
             JSONArray framesJson = selected.getJSONArray("frames");
             List<int[][]> frames = new ArrayList<>();
             for (int f = 0; f < framesJson.length(); f++) {
@@ -183,7 +241,7 @@ public class MarqueeListActivity extends AppCompatActivity {
                 .show();
     }
 
-    /** 调整播放速度并立即应用 */
+    /** 调整播放速度并保存 */
     private void adjustSpeed(int position) {
         final EditText editText = new EditText(this);
         editText.setHint("请输入速度（毫秒）");
@@ -196,17 +254,21 @@ public class MarqueeListActivity extends AppCompatActivity {
                         int ms = Integer.parseInt(val);
                         if (ms > 0) {
                             playIntervalMs = ms;
+                            savedEffects.get(position).put("speed", ms);
+                            saveChanges();
                             playSelectedMarquee(position);
                         }
                     } catch (NumberFormatException e) {
                         Toast.makeText(this, "输入无效", Toast.LENGTH_SHORT).show();
+                    } catch (Exception e) {
+                        e.printStackTrace();
                     }
                 })
                 .setNegativeButton("取消", null)
                 .show();
     }
 
-    /** 打开对应GIF（已兼容 Android 10+ Scoped Storage） */
+    /** 打开GIF */
     private void openGifFile(String name) {
         File gifFile = findGifFile(name);
         if (gifFile != null && gifFile.exists()) {
@@ -229,7 +291,7 @@ public class MarqueeListActivity extends AppCompatActivity {
         }
     }
 
-    /** 分享对应GIF（已兼容 Android 10+ Scoped Storage） */
+    /** 分享GIF */
     private void shareGifFile(String name) {
         File gifFile = findGifFile(name);
         if (gifFile != null && gifFile.exists()) {
@@ -253,10 +315,9 @@ public class MarqueeListActivity extends AppCompatActivity {
         }
     }
 
-    /** 查找 GIF 文件（兼容 Android 6~13+） **/
+    /** 查找 GIF 文件 **/
     private File findGifFile(String name) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            // Android 10+ 用 MediaStore 查询
             try (Cursor cursor = getContentResolver().query(
                     MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
                     new String[]{MediaStore.Images.Media._ID, MediaStore.Images.Media.DISPLAY_NAME},
@@ -265,32 +326,27 @@ public class MarqueeListActivity extends AppCompatActivity {
                     null
             )) {
                 if (cursor != null && cursor.moveToFirst()) {
-                    // Android 10+ 读取绝对路径
                     int id = cursor.getInt(cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID));
                     Uri contentUri = Uri.withAppendedPath(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, String.valueOf(id));
-                    return new File(getRealPathFromUri(contentUri)); // getRealPathFromUri 方法要适配
+                    return new File(getRealPathFromUri(contentUri));
                 }
             } catch (Exception e) {
                 e.printStackTrace();
             }
             return null;
         } else {
-            // Android 6~9 用旧目录
             File picturesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
             return new File(picturesDir, name + ".gif");
         }
     }
 
-    /** 从 contentUri 获取真实文件路径（兼容 Android 6~13+） **/
+    /** 从 contentUri 获取真实文件路径 **/
     private String getRealPathFromUri(Uri uri) {
         String filePath = null;
-        // 查询 MediaStore 数据库
         try (Cursor cursor = getContentResolver().query(
                 uri,
-                new String[]{MediaStore.Images.Media.DATA}, // 旧字段，在 Android Q 已弃用但有的机型还返回
-                null,
-                null,
-                null
+                new String[]{MediaStore.Images.Media.DATA},
+                null, null, null
         )) {
             if (cursor != null && cursor.moveToFirst()) {
                 int idx = cursor.getColumnIndex(MediaStore.Images.Media.DATA);
@@ -302,10 +358,8 @@ public class MarqueeListActivity extends AppCompatActivity {
             e.printStackTrace();
         }
 
-        // 如果 filePath 是 null，用更通用的方法尝试打开
         if (filePath == null) {
             try {
-                // 把 Uri 里的内容复制到临时文件，这样也能用 FileProvider 共享
                 File tempFile = new File(getCacheDir(), System.currentTimeMillis() + ".gif");
                 try (InputStream in = getContentResolver().openInputStream(uri);
                      OutputStream out = new FileOutputStream(tempFile)) {
@@ -320,11 +374,8 @@ public class MarqueeListActivity extends AppCompatActivity {
                 io.printStackTrace();
             }
         }
-
         return filePath;
     }
-
-
 
     /** 保存修改到SP */
     private void saveChanges() {
@@ -342,7 +393,7 @@ public class MarqueeListActivity extends AppCompatActivity {
         }
     }
 
-    /** 权限检查方法 */
+    /** 权限检查 */
     private boolean ensureReadPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             return ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_IMAGES)
