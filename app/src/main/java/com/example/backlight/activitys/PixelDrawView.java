@@ -159,6 +159,31 @@ public class PixelDrawView extends View {
         return rotated;
     }
 
+    // 恢复普通点阵数据
+    public void setDotStates(int[][] states) {
+        if (states != null && states.length == rows && states[0].length == cols) {
+            for (int r = 0; r < rows; r++) {
+                System.arraycopy(states[r], 0, dotStates[r], 0, cols);
+            }
+            invalidate();
+        }
+    }
+
+    // 恢复完整文字帧数据
+    public void setFullTextStates(int[][] states, int totalCols) {
+        if (states != null) {
+            this.fullTextStates = states;
+            this.totalCols = totalCols;
+            displayStartCol = totalCols > cols ? (totalCols - cols) / 2 : 0;
+            for (int r = 0; r < rows; r++) {
+                for (int c = 0; c < cols; c++) {
+                    dotStates[r][c] = fullTextStates[r][Math.min(displayStartCol + c, totalCols - 1)];
+                }
+            }
+            invalidate();
+        }
+    }
+
     public void drawTextOnGrid(String text, int sizeMode) {
         clearDots();
         fullTextStates = null;

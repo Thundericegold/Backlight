@@ -190,6 +190,68 @@ public class MainActivity extends BaseActivity {
         previewView.clearDots();
     }
 
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        // 保存当前点阵
+        outState.putString("dotStates", arrayToJson(drawView.getDotStatesCopy()));
+        // 如果是文字跑马灯状态，也保存完整文字帧
+        if (drawView.hasFullTextStates()) {
+            outState.putString("fullTextStates", arrayToJson(drawView.getFullTextStatesCopy()));
+            outState.putInt("totalCols", drawView.getTotalCols());
+        }
+    }
+
+    @Override
+    protected void onRestoreInstanceState(Bundle savedInstanceState) {
+        super.onRestoreInstanceState(savedInstanceState);
+        String dotJson = savedInstanceState.getString("dotStates");
+        String fullJson = savedInstanceState.getString("fullTextStates");
+        int totalCols = savedInstanceState.getInt("totalCols", drawView.getCols());
+
+        if (dotJson != null) {
+            drawView.setDotStates(jsonToArray(dotJson));
+            previewView.setDotStates(jsonToArray(dotJson)); // 同步预览区
+        }
+        if (fullJson != null) {
+            drawView.setFullTextStates(jsonToArray(fullJson), totalCols);
+            previewView.setFullTextStates(jsonToArray(fullJson), totalCols);
+        }
+    }
+
+    // ======= 工具方法 =======
+    private String arrayToJson(int[][] arr) {
+        try {
+            org.json.JSONArray outer = new org.json.JSONArray();
+            for (int[] row : arr) {
+                org.json.JSONArray inner = new org.json.JSONArray();
+                for (int v : row) {
+                    inner.put(v);
+                }
+                outer.put(inner);
+            }
+            return outer.toString();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private int[][] jsonToArray(String json) {
+        try {
+            org.json.JSONArray outer = new org.json.JSONArray(json);
+            int[][] arr = new int[outer.length()][outer.getJSONArray(0).length()];
+            for (int r = 0; r < outer.length(); r++) {
+                org.json.JSONArray inner = outer.getJSONArray(r);
+                for (int c = 0; c < inner.length(); c++) {
+                    arr[r][c] = inner.getInt(c);
+                }
+            }
+            return arr;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     private void showTextInputDialog() {
         AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
         builder.setTitle("输入文字及大小（最多20字符）");
