@@ -174,8 +174,10 @@ public class MainActivity extends BaseActivity {
         super.onCreate(savedInstanceState);
         setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
         setContentView(R.layout.activity_main);
+        initView();
+        initListener();
 
-// 初始化权限请求器
+        // 初始化权限请求器
         permissionLauncher = registerForActivityResult(
                 new ActivityResultContracts.RequestPermission(),
                 isGranted -> {
@@ -184,19 +186,6 @@ public class MainActivity extends BaseActivity {
                     }
                 });
 
-        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
-            Insets sysBarsInsets = insets.getInsets(WindowInsetsCompat.Type.systemBars());
-            int orientation = getResources().getConfiguration().orientation;
-            if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
-                v.setPadding(sysBarsInsets.left, 0, sysBarsInsets.right, 0);
-            } else {
-                v.setPadding(0, sysBarsInsets.top, 0, sysBarsInsets.bottom);
-            }
-            return insets;
-        });
-
-        initView();
-        initListener();
         previewView.setAsPreviewOf(drawView);
         previewView.setMode(PixelDrawView.MODE_DRAW);
         previewView.clearDots();
