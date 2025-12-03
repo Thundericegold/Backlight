@@ -131,7 +131,11 @@
                 style="@style/CustomRoundedButton"
                 android:visibility="visible"
                 android:text="逆时针旋转" />
-
+            <Button
+                android:id="@+id/btnFade"
+                style="@style/CustomRoundedButton"
+                android:visibility="visible"
+                android:text="淡入淡出"/>
         </LinearLayout>
     </ScrollView>
 </LinearLayout>

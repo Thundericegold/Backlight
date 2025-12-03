@@ -53,7 +53,7 @@ public class MainActivity extends BaseActivity {
     private PixelDrawView previewView;
 
     private Button btnDraw, btnErase, btnClear, btnInput, btnSave, btnSaveMarquee, btnViewSavedMarquee;
-    private Button btnMarquee, btnRotateCW, btnRotateCCW;
+    private Button btnMarquee, btnRotateCW, btnRotateCCW,btnFade;
 
     private Handler animHandler = new Handler();
     private Runnable animTask;
@@ -76,6 +76,7 @@ public class MainActivity extends BaseActivity {
         btnMarquee = findViewById(R.id.btnMarquee);
         btnRotateCW = findViewById(R.id.btnRotateCW);
         btnRotateCCW = findViewById(R.id.btnRotateCCW);
+        btnFade = findViewById(R.id.btnFade);
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -167,6 +168,28 @@ public class MainActivity extends BaseActivity {
             }
             return v.onTouchEvent(event);
         });
+
+        // ===== 新增淡入淡出按钮逻辑 =====
+        btnFade.setOnClickListener(v -> {
+            if (previewView.isFading()) { // 如果已经在淡入淡出 → 停止
+                previewView.stopFadeEffect();
+                btnFade.setText("淡入淡出");
+                return;
+            }
+            if (!previewView.hasFullTextStates()) { // 没有文字 → 提示
+                Toast.makeText(this, "请输入文字才能使用该特效", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            // 停止其他动画
+            stopAnimation(btnMarquee, "跑马灯");
+            stopAnimation(btnRotateCW, "顺时针旋转");
+            stopAnimation(btnRotateCCW, "逆时针旋转");
+
+            // 启动淡入淡出动画
+            previewView.startFadeEffect();
+            btnFade.setText("停止淡入淡出");
+        });
+
     }
 
     @Override
@@ -437,6 +460,14 @@ public class MainActivity extends BaseActivity {
         isAnimRunning = false;
         btn.setText(defaultText);
         previewView.resetOffset();
+
+        // 停止淡入淡出效果
+        if (previewView.isFading()) {
+            previewView.stopFadeEffect();
+            btnFade.setText("淡入淡出");
+        }
     }
+
+
 
 }

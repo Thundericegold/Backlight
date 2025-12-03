@@ -1,5 +1,6 @@
 package com.example.backlight.activitys;
 
+import android.animation.ValueAnimator;
 import android.annotation.SuppressLint;
 import android.content.ContentValues;
 import android.content.Context;
@@ -7,6 +8,8 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.Rect;
+import android.graphics.RectF;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
@@ -57,6 +60,11 @@ public class PixelDrawView extends View {
     private Handler playHandler;
     private Runnable playRunnable;
 
+    private ValueAnimator fadeAnimator;   // 控制淡入淡出的动画器
+    private float fadeFactor = 1f;        // 淡入淡出插值因子 (1=白色,0=黑色)
+    private boolean isFading = false;     // 是否正在淡入淡出
+
+
     public PixelDrawView(Context context) { super(context); init(); }
     public PixelDrawView(Context context, AttributeSet attrs) { super(context, attrs); init(); }
 
@@ -94,12 +102,15 @@ public class PixelDrawView extends View {
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
+        // 绘制白色背景
         canvas.drawRect(0, 0, getWidth(), getHeight(), whiteBgPaint);
 
+        // 绘制网格背景
         float gridWidth = cellSize * cols;
         float gridHeight = cellSize * rows;
         canvas.drawRect(0, 0, gridWidth, gridHeight, bgPaint);
 
+        // 获取数据源：普通模式 / 预览模式
         int[][] srcData;
         int srcCols;
         if (isPreview && fullTextStates != null) {
@@ -110,10 +121,12 @@ public class PixelDrawView extends View {
             srcCols = cols;
         }
 
+        // 如果有旋转角度 → 使用旋转后的数据
         if (previewRotateDegree != 0f) {
             srcData = getRotatedStates(srcData, srcCols, previewRotateDegree);
         }
 
+        // 按行列绘制点阵
         for (int r = 0; r < rows; r++) {
             for (int c = 0; c < cols; c++) {
                 int srcCol;
@@ -124,16 +137,30 @@ public class PixelDrawView extends View {
                 } else {
                     srcCol = c;
                 }
+
                 float cx = dotCenters[r][c][0];
                 float cy = dotCenters[r][c][1];
+
                 if (srcData[r][srcCol] == 0) {
+                    // 黑点保持原样
                     canvas.drawCircle(cx, cy, dotRadius, blackPaint);
                 } else {
-                    canvas.drawCircle(cx, cy, dotRadius, whitePaint);
+                    // 白点根据是否淡入淡出来决定用什么颜色
+                    if (isFading) {
+                        // 插值计算黑白渐变颜色
+                        int fadeColor = interpolateColor(Color.BLACK, Color.WHITE, fadeFactor);
+                        Paint fadePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+                        fadePaint.setColor(fadeColor);
+                        canvas.drawCircle(cx, cy, dotRadius, fadePaint);
+                    } else {
+                        // 普通白点
+                        canvas.drawCircle(cx, cy, dotRadius, whitePaint);
+                    }
                 }
             }
         }
     }
+
 
     private int[][] getRotatedStates(int[][] src, int srcCols, float degree) {
         int[][] rotated = new int[rows][srcCols];
@@ -461,5 +488,49 @@ public class PixelDrawView extends View {
             }
         }
         return bmp;
+    }
+
+    public boolean isFading() {
+        return isFading;
+    }
+
+
+    public void startFadeEffect() {
+        if (isFading) return; // 已经在淡入淡出中，直接返回
+        isFading = true;
+        fadeAnimator = ValueAnimator.ofFloat(1f, 0f, 1f); // 白→黑→白
+        fadeAnimator.setDuration(2000); // 一个循环 2 秒
+        fadeAnimator.setRepeatCount(ValueAnimator.INFINITE);
+        fadeAnimator.addUpdateListener(animation -> {
+            fadeFactor = (float) animation.getAnimatedValue();
+            invalidate(); // 触发重绘，颜色会变化
+        });
+        fadeAnimator.start();
+    }
+
+    public void stopFadeEffect() {
+        if (fadeAnimator != null) {
+            fadeAnimator.cancel();
+            fadeAnimator = null;
+        }
+        fadeFactor = 1f;  // 恢复为白色
+        isFading = false;
+        invalidate(); // 重绘
+    }
+
+    private int interpolateColor(int colorFrom, int colorTo, float factor) {
+        int r1 = Color.red(colorFrom);
+        int g1 = Color.green(colorFrom);
+        int b1 = Color.blue(colorFrom);
+
+        int r2 = Color.red(colorTo);
+        int g2 = Color.green(colorTo);
+        int b2 = Color.blue(colorTo);
+
+        int r = (int) (r1 + (r2 - r1) * factor);
+        int g = (int) (g1 + (g2 - g1) * factor);
+        int b = (int) (b1 + (b2 - b1) * factor);
+
+        return Color.rgb(r, g, b);
     }
 }
