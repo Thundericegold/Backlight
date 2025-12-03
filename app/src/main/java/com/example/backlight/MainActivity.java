@@ -180,11 +180,6 @@ public class MainActivity extends BaseActivity {
                 Toast.makeText(this, "请输入文字才能使用该特效", Toast.LENGTH_SHORT).show();
                 return;
             }
-            // 停止其他动画
-            stopAnimation(btnMarquee, "跑马灯");
-            stopAnimation(btnRotateCW, "顺时针旋转");
-            stopAnimation(btnRotateCCW, "逆时针旋转");
-
             // 启动淡入淡出动画
             previewView.startFadeEffect();
             btnFade.setText("停止淡入淡出");
@@ -460,12 +455,6 @@ public class MainActivity extends BaseActivity {
         isAnimRunning = false;
         btn.setText(defaultText);
         previewView.resetOffset();
-
-        // 停止淡入淡出效果
-        if (previewView.isFading()) {
-            previewView.stopFadeEffect();
-            btnFade.setText("淡入淡出");
-        }
     }
 
 
