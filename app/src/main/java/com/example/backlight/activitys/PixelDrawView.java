@@ -64,6 +64,11 @@ public class PixelDrawView extends View {
     private float fadeFactor = 1f;        // 淡入淡出插值因子 (1=白色,0=黑色)
     private boolean isFading = false;     // 是否正在淡入淡出
 
+    private OnContentChangeListener contentChangeListener;
+
+    public interface OnContentChangeListener {
+        void onContentEmpty(boolean isEmpty);
+    }
 
     public PixelDrawView(Context context) { super(context); init(); }
     public PixelDrawView(Context context, AttributeSet attrs) { super(context, attrs); init(); }
@@ -186,6 +191,12 @@ public class PixelDrawView extends View {
         return rotated;
     }
 
+    private void updateAfterDraw() {
+        if (contentChangeListener != null) {
+            contentChangeListener.onContentEmpty(isEmpty());
+        }
+    }
+
     // 恢复普通点阵数据
     public void setDotStates(int[][] states) {
         if (states != null && states.length == rows && states[0].length == cols) {
@@ -251,6 +262,7 @@ public class PixelDrawView extends View {
             }
         }
         invalidate();
+        updateAfterDraw();
     }
 
     public void setMode(int m) { mode = m; }
@@ -270,6 +282,7 @@ public class PixelDrawView extends View {
     public void clearDots() {
         for (int[] row : dotStates) java.util.Arrays.fill(row, 0);
         invalidate();
+        updateAfterDraw();
     }
 
     public void setEditable(boolean e) { editable = e; }
@@ -319,6 +332,7 @@ public class PixelDrawView extends View {
         previewOffsetX = 0;
         previewRotateDegree = 0f;
         invalidate();
+        updateAfterDraw();
     }
 
     public void resetOffset() {
@@ -370,6 +384,7 @@ public class PixelDrawView extends View {
             if (nearest != null) {
                 dotStates[nearest[0]][nearest[1]] = (mode == MODE_DRAW ? 1 : 0);
                 invalidate();
+                updateAfterDraw();
                 fullTextStates = dotStates;
                 totalCols = cols;
             }
@@ -532,5 +547,20 @@ public class PixelDrawView extends View {
         int b = (int) (b1 + (b2 - b1) * factor);
 
         return Color.rgb(r, g, b);
+    }
+
+    public void setOnContentChangeListener(OnContentChangeListener listener) {
+        this.contentChangeListener = listener;
+    }
+
+    public boolean isEmpty() {
+        for (int r = 0; r < rows; r++) {
+            for (int c = 0; c < cols; c++) {
+                if (dotStates[r][c] == 1) { // 有白点
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 }

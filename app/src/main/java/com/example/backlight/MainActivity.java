@@ -8,6 +8,7 @@ import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
+import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -26,9 +27,6 @@ import android.widget.Toast;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AlertDialog;
-import androidx.core.graphics.Insets;
-import androidx.core.view.ViewCompat;
-import androidx.core.view.WindowInsetsCompat;
 import androidx.core.content.ContextCompat;
 
 import com.example.backlight.activitys.BaseActivity;
@@ -77,11 +75,16 @@ public class MainActivity extends BaseActivity {
         btnRotateCW = findViewById(R.id.btnRotateCW);
         btnRotateCCW = findViewById(R.id.btnRotateCCW);
         btnFade = findViewById(R.id.btnFade);
+        disableButton();
     }
 
     @SuppressLint("ClickableViewAccessibility")
     @Override
     public void initListener() {
+        drawView.setOnContentChangeListener(isEmpty -> {
+            btnClear.setEnabled(!isEmpty);
+            btnErase.setEnabled(!isEmpty);
+        });
         btnDraw.setOnClickListener(v -> {
             stopAnimation(btnMarquee, "跑马灯");
             drawView.setMode(PixelDrawView.MODE_DRAW);
@@ -457,6 +460,9 @@ public class MainActivity extends BaseActivity {
         previewView.resetOffset();
     }
 
-
+    private void disableButton(){
+        btnClear.setEnabled(!drawView.isEmpty());
+        btnErase.setEnabled(!drawView.isEmpty());
+    }
 
 }
