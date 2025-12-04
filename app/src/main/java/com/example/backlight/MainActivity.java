@@ -350,6 +350,7 @@ public class MainActivity extends BaseActivity {
             int frameCount = totalCols + displayCols;
             List<Bitmap> gifFrames = new ArrayList<>();
 
+            // 生成所有帧
             for (int offset = 0; offset < frameCount; offset++) {
                 int[][] frame = new int[rows][displayCols];
                 for (int r = 0; r < rows; r++) {
@@ -372,29 +373,11 @@ public class MainActivity extends BaseActivity {
                 framesArray.put(rowSet);
             }
 
-            // 保存到数据库
-            AppDatabase db = AppDatabase.getInstance(this);
-            MarqueeDao dao = db.marqueeDao();
-            dao.insert(new MarqueeEntity(saveName, "marquee", framesArray.toString(), 250));
-
-            // 保存 GIF 文件
-            OutputStream gifOut;
-            String saveLocation;
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                ContentValues values = new ContentValues();
-                values.put(MediaStore.Images.Media.DISPLAY_NAME, saveName + ".gif");
-                values.put(MediaStore.Images.Media.MIME_TYPE, "image/gif");
-                values.put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES);
-                Uri uri = getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
-                gifOut = getContentResolver().openOutputStream(uri);
-                saveLocation = uri.toString();
-            } else {
-                File gifDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
-                if (!gifDir.exists()) gifDir.mkdirs();
-                File gifFile = new File(gifDir, saveName + ".gif");
-                gifOut = new FileOutputStream(gifFile);
-                saveLocation = gifFile.getAbsolutePath();
-            }
+            // ✅ 保存到 APP 内部目录，而不是系统相册
+            File gifDir = new File(getExternalFilesDir(Environment.DIRECTORY_MOVIES), "marquees");
+            if (!gifDir.exists()) gifDir.mkdirs();
+            File gifFile = new File(gifDir, saveName + ".gif");
+            OutputStream gifOut = new FileOutputStream(gifFile);
 
             AnimatedGifEncoder gifEncoder = new AnimatedGifEncoder();
             gifEncoder.start(gifOut);
@@ -407,14 +390,20 @@ public class MainActivity extends BaseActivity {
             gifEncoder.finish();
             gifOut.close();
 
-            Toast.makeText(this, "保存成功：" + saveLocation, Toast.LENGTH_LONG).show();
-        } catch (IOException e) {
+            // ✅ 保存到数据库（包含 GIF 路径）
+            AppDatabase db = AppDatabase.getInstance(this);
+            MarqueeDao dao = db.marqueeDao();
+            dao.insert(new MarqueeEntity(saveName, "marquee", framesArray.toString(), 250, gifFile.getAbsolutePath()));
+
+            Toast.makeText(this, "已保存到APP内部: " + gifFile.getAbsolutePath(), Toast.LENGTH_LONG).show();
+        } catch (Exception e) {
             e.printStackTrace();
             Toast.makeText(this, "保存失败", Toast.LENGTH_SHORT).show();
         } finally {
             btnSaveMarquee.setEnabled(true);
         }
     }
+
 
     /** 权限申请逻辑 **/
     private void checkStoragePermission(Runnable onGranted) {

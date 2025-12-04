@@ -139,8 +139,8 @@ public class MarqueeListActivity extends BaseActivity {
                 String name = obj.optString("name", "未命名");
                 tvName.setText(name);
 
-                File gifFile = findGifFile(name);
-                if (gifFile != null && gifFile.exists()) {
+                File gifFile = new File(obj.optString("gifPath"));
+                if (gifFile.exists()) {
                     Glide.with(MarqueeListActivity.this)
                             .asGif()
                             .load(gifFile)
@@ -166,12 +166,14 @@ public class MarqueeListActivity extends BaseActivity {
                 obj.put("mode", e.mode);
                 obj.put("frames", new JSONArray(e.framesJson));
                 obj.put("speed", e.speed);
+                obj.put("gifPath", e.gifPath); // 存 GIF 路径
                 savedEffects.add(obj);
             } catch (Exception ex) {
                 ex.printStackTrace();
             }
         }
     }
+
 
     private void playSelectedMarquee(int position) {
         try {
@@ -266,50 +268,33 @@ public class MarqueeListActivity extends BaseActivity {
                 .show();
     }
 
-    private void openGifFile(String name) {
-        File gifFile = findGifFile(name);
-        if (gifFile != null && gifFile.exists()) {
+    private void openGifFile(String gifPath) {
+        File gifFile = new File(gifPath);
+        if (gifFile.exists()) {
             Intent intent = new Intent(Intent.ACTION_VIEW);
-            Uri uri;
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                uri = FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", gifFile);
-                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            } else {
-                uri = Uri.fromFile(gifFile);
-            }
+            Uri uri = FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", gifFile);
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             intent.setDataAndType(uri, "image/gif");
-            try {
-                startActivity(intent);
-            } catch (Exception e) {
-                Toast.makeText(this, "无法打开GIF", Toast.LENGTH_SHORT).show();
-            }
+            startActivity(Intent.createChooser(intent, "查看GIF"));
         } else {
-            Toast.makeText(this, "GIF文件不存在", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "GIF不存在", Toast.LENGTH_SHORT).show();
         }
     }
 
-    private void shareGifFile(String name) {
-        File gifFile = findGifFile(name);
-        if (gifFile != null && gifFile.exists()) {
+    private void shareGifFile(String gifPath) {
+        File gifFile = new File(gifPath);
+        if (gifFile.exists()) {
             Intent shareIntent = new Intent(Intent.ACTION_SEND);
             shareIntent.setType("image/gif");
-            Uri uri;
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                uri = FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", gifFile);
-                shareIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            } else {
-                uri = Uri.fromFile(gifFile);
-            }
+            Uri uri = FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", gifFile);
+            shareIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             shareIntent.putExtra(Intent.EXTRA_STREAM, uri);
-            try {
-                startActivity(Intent.createChooser(shareIntent, "分享GIF"));
-            } catch (Exception e) {
-                Toast.makeText(this, "无法分享GIF", Toast.LENGTH_SHORT).show();
-            }
+            startActivity(Intent.createChooser(shareIntent, "分享GIF"));
         } else {
-            Toast.makeText(this, "GIF文件不存在", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "GIF不存在", Toast.LENGTH_SHORT).show();
         }
     }
+
 
     private File findGifFile(String name) {
         File picturesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
