@@ -23,6 +23,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.Arrays;
 import java.util.List;
 
 public class PixelDrawView extends View {
@@ -63,8 +64,17 @@ public class PixelDrawView extends View {
     private ValueAnimator fadeAnimator;   // 控制淡入淡出的动画器
     private float fadeFactor = 1f;        // 淡入淡出插值因子 (1=白色,0=黑色)
     private boolean isFading = false;     // 是否正在淡入淡出
-
     private OnContentChangeListener contentChangeListener;
+    private boolean isColumnFadeRunning = false;
+    private boolean isShowingPhase = true; // true=显现，false=消失
+    private int currentColumn = 0;
+    private Handler fadeHandler = new Handler();
+    private Runnable fadeRunnable;
+    private int fadeInterval = 100; // 每列间隔毫秒
+    private int[][] previewOriginalStates; // 保存原始文字点阵
+    // 当前动画显示的工作数组（只用于渐变动画）
+    private int[][] previewWorkingStates;
+
 
     public interface OnContentChangeListener {
         void onContentEmpty(boolean isEmpty);
@@ -119,12 +129,18 @@ public class PixelDrawView extends View {
         int[][] srcData;
         int srcCols;
         if (isPreview && fullTextStates != null) {
-            srcData = fullTextStates;
-            srcCols = totalCols;
+            if (previewWorkingStates != null) {
+                srcData = previewWorkingStates;
+                srcCols = totalCols;
+            } else {
+                srcData = fullTextStates;
+                srcCols = totalCols;
+            }
         } else {
             srcData = dotStates;
             srcCols = cols;
         }
+
 
         // 如果有旋转角度 → 使用旋转后的数据
         if (previewRotateDegree != 0f) {
@@ -563,4 +579,76 @@ public class PixelDrawView extends View {
         }
         return true;
     }
+    public void startColumnFade() {
+        if (!isPreview || fullTextStates == null) return;
+
+        isColumnFadeRunning = true;
+        isShowingPhase = true;
+        currentColumn = 0;
+
+        // 保存原始文字
+        previewOriginalStates = new int[rows][totalCols];
+        for (int r = 0; r < rows; r++) {
+            System.arraycopy(fullTextStates[r], 0, previewOriginalStates[r], 0, totalCols);
+        }
+
+        // 创建工作数组初始全黑
+        previewWorkingStates = new int[rows][totalCols];
+        for (int r = 0; r < rows; r++) {
+            Arrays.fill(previewWorkingStates[r], 0);
+        }
+
+        invalidate();
+
+        fadeRunnable = new Runnable() {
+            @Override
+            public void run() {
+                if (!isColumnFadeRunning) return;
+
+                if (isShowingPhase) {
+                    if (currentColumn < totalCols) {
+                        for (int r = 0; r < rows; r++) {
+                            previewWorkingStates[r][currentColumn] = previewOriginalStates[r][currentColumn];
+                        }
+                        currentColumn++;
+                    } else {
+                        isShowingPhase = false;
+                        currentColumn = 0;
+                    }
+                } else {
+                    if (currentColumn < totalCols) {
+                        for (int r = 0; r < rows; r++) {
+                            previewWorkingStates[r][currentColumn] = 0;
+                        }
+                        currentColumn++;
+                    } else {
+                        isShowingPhase = true;
+                        currentColumn = 0;
+                    }
+                }
+
+                invalidate();
+                fadeHandler.postDelayed(this, fadeInterval);
+            }
+        };
+
+        fadeHandler.postDelayed(fadeRunnable, fadeInterval);
+    }
+
+
+    public void stopColumnFade() {
+        isColumnFadeRunning = false;
+        fadeHandler.removeCallbacks(fadeRunnable);
+
+        previewWorkingStates = null;
+        invalidate();
+    }
+
+
+
+    public boolean isColumnFadeRunning() {
+        return isColumnFadeRunning;
+    }
+
+
 }

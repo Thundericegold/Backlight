@@ -145,6 +145,11 @@
                 style="@style/CustomRoundedButton"
                 android:visibility="visible"
                 android:text="淡入淡出"/>
+            <Button
+                android:id="@+id/btnGradient"
+                style="@style/CustomRoundedButton"
+                android:visibility="visible"
+                android:text="渐变"/>
         </LinearLayout>
     </ScrollView>
 </LinearLayout>

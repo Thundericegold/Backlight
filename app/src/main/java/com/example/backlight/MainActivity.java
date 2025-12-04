@@ -4,11 +4,8 @@ import android.Manifest;
 import android.annotation.SuppressLint;
 import android.content.ContentValues;
 import android.content.Intent;
-import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
-import android.content.res.Configuration;
 import android.graphics.Bitmap;
-import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -42,7 +39,6 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -51,7 +47,7 @@ public class MainActivity extends BaseActivity {
     private PixelDrawView previewView;
 
     private Button btnDraw, btnErase, btnClear, btnInput, btnSave, btnSaveMarquee, btnViewSavedMarquee;
-    private Button btnMarquee, btnRotateCW, btnRotateCCW,btnFade;
+    private Button btnMarquee, btnRotateCW, btnRotateCCW,btnFade,btnGradient;
 
     private Handler animHandler = new Handler();
     private Runnable animTask;
@@ -75,6 +71,7 @@ public class MainActivity extends BaseActivity {
         btnRotateCW = findViewById(R.id.btnRotateCW);
         btnRotateCCW = findViewById(R.id.btnRotateCCW);
         btnFade = findViewById(R.id.btnFade);
+        btnGradient = findViewById(R.id.btnGradient);
         disableButton();
     }
 
@@ -84,6 +81,7 @@ public class MainActivity extends BaseActivity {
         drawView.setOnContentChangeListener(isEmpty -> {
             btnClear.setEnabled(!isEmpty);
             btnErase.setEnabled(!isEmpty);
+            canvasMonitoring();
         });
         btnDraw.setOnClickListener(v -> {
             stopAnimation(btnMarquee, "跑马灯");
@@ -97,6 +95,7 @@ public class MainActivity extends BaseActivity {
 
         btnClear.setOnClickListener(v -> {
             stopAnimation(btnMarquee, "跑马灯");
+            previewView.stopColumnFade();
             drawView.resetAll();
             previewView.resetAll();
             drawView.setMode(PixelDrawView.MODE_DRAW);
@@ -187,6 +186,23 @@ public class MainActivity extends BaseActivity {
             previewView.startFadeEffect();
             btnFade.setText("停止淡入淡出");
         });
+
+        btnGradient.setOnClickListener(v -> {
+            if (!previewView.hasFullTextStates()) {
+                Toast.makeText(this, "预览中没有文字，无法使用该特效", Toast.LENGTH_SHORT).show();
+                return; // 不执行动画
+            }
+
+            if (!previewView.isColumnFadeRunning()) {
+                previewView.startColumnFade();
+                btnGradient.setText("停止渐变");
+            } else {
+                previewView.stopColumnFade();
+                btnGradient.setText("开始渐变");
+            }
+        });
+
+
 
     }
 
@@ -463,6 +479,17 @@ public class MainActivity extends BaseActivity {
     private void disableButton(){
         btnClear.setEnabled(!drawView.isEmpty());
         btnErase.setEnabled(!drawView.isEmpty());
+    }
+
+    //画布监听方法,画布为空时所有按钮归零，所有状态重置
+    public void canvasMonitoring(){
+        stopAnimation(btnMarquee, "跑马灯");
+        stopAnimation(btnRotateCW, "顺时针旋转");
+        stopAnimation(btnRotateCCW, "逆时针旋转");
+        previewView.stopFadeEffect();
+        btnFade.setText("淡入淡出");
+        previewView.stopColumnFade();
+        btnGradient.setText("开始渐变");
     }
 
 }
