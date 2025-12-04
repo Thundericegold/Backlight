@@ -84,7 +84,9 @@ public class MainActivity extends BaseActivity {
         drawView.setOnContentChangeListener(isEmpty -> {
             btnClear.setEnabled(!isEmpty);
             btnErase.setEnabled(!isEmpty);
-            canvasMonitoring();
+            if (isEmpty){
+                canvasMonitoring();
+            }
         });
         btnDraw.setOnClickListener(v -> {
             stopAnimation(btnMarquee, "跑马灯");
@@ -238,6 +240,7 @@ public class MainActivity extends BaseActivity {
             drawView.setFullTextStates(jsonToArray(fullJson), totalCols);
             previewView.setFullTextStates(jsonToArray(fullJson), totalCols);
         }
+        disableButton();
     }
 
     // ======= 工具方法 =======

@@ -1,6 +1,5 @@
 package com.example.backlight.activitys;
 
-import android.animation.ValueAnimator;
 import android.annotation.SuppressLint;
 import android.content.ContentValues;
 import android.content.Context;
@@ -8,8 +7,6 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
-import android.graphics.Rect;
-import android.graphics.RectF;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
@@ -23,7 +20,6 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.util.Arrays;
 import java.util.List;
 
 public class PixelDrawView extends View {
@@ -60,20 +56,10 @@ public class PixelDrawView extends View {
 
     private Handler playHandler;
     private Runnable playRunnable;
-
-    private ValueAnimator fadeAnimator;   // 控制淡入淡出的动画器
-    private float fadeFactor = 1f;        // 淡入淡出插值因子 (1=白色,0=黑色)
-    private boolean isFading = false;     // 是否正在淡入淡出
     private OnContentChangeListener contentChangeListener;
-    private boolean isColumnFadeRunning = false;
-    private boolean isShowingPhase = true; // true=显现，false=消失
-    private int currentColumn = 0;
-    private Handler fadeHandler = new Handler();
-    private Runnable fadeRunnable;
-    private int fadeInterval = 100; // 每列间隔毫秒
-    private int[][] previewOriginalStates; // 保存原始文字点阵
-    // 当前动画显示的工作数组（只用于渐变动画）
-    private int[][] previewWorkingStates;
+    //动画控制器
+    private SplitViewOne fadeController;
+    private SplitViewTow columnFadeController;
 
 
     public interface OnContentChangeListener {
@@ -99,6 +85,8 @@ public class PixelDrawView extends View {
         whitePaint.setColor(Color.WHITE);
 
         dotCenters = new float[rows][cols][2];
+        fadeController = new SplitViewOne(this);
+        columnFadeController = new SplitViewTow(this);
     }
 
     @Override
@@ -129,8 +117,8 @@ public class PixelDrawView extends View {
         int[][] srcData;
         int srcCols;
         if (isPreview && fullTextStates != null) {
-            if (previewWorkingStates != null) {
-                srcData = previewWorkingStates;
+            if (getPreviewWorkingStates() != null) {
+                srcData = getPreviewWorkingStates();
                 srcCols = totalCols;
             } else {
                 srcData = fullTextStates;
@@ -167,9 +155,9 @@ public class PixelDrawView extends View {
                     canvas.drawCircle(cx, cy, dotRadius, blackPaint);
                 } else {
                     // 白点根据是否淡入淡出来决定用什么颜色
-                    if (isFading) {
+                    if (isFading()) {
                         // 插值计算黑白渐变颜色
-                        int fadeColor = interpolateColor(Color.BLACK, Color.WHITE, fadeFactor);
+                        int fadeColor = interpolateColor(Color.BLACK, Color.WHITE);
                         Paint fadePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
                         fadePaint.setColor(fadeColor);
                         canvas.drawCircle(cx, cy, dotRadius, fadePaint);
@@ -521,48 +509,11 @@ public class PixelDrawView extends View {
         return bmp;
     }
 
-    public boolean isFading() {
-        return isFading;
-    }
-
-
-    public void startFadeEffect() {
-        if (isFading) return; // 已经在淡入淡出中，直接返回
-        isFading = true;
-        fadeAnimator = ValueAnimator.ofFloat(1f, 0f, 1f); // 白→黑→白
-        fadeAnimator.setDuration(2000); // 一个循环 2 秒
-        fadeAnimator.setRepeatCount(ValueAnimator.INFINITE);
-        fadeAnimator.addUpdateListener(animation -> {
-            fadeFactor = (float) animation.getAnimatedValue();
-            invalidate(); // 触发重绘，颜色会变化
-        });
-        fadeAnimator.start();
-    }
-
-    public void stopFadeEffect() {
-        if (fadeAnimator != null) {
-            fadeAnimator.cancel();
-            fadeAnimator = null;
-        }
-        fadeFactor = 1f;  // 恢复为白色
-        isFading = false;
-        invalidate(); // 重绘
-    }
-
-    private int interpolateColor(int colorFrom, int colorTo, float factor) {
-        int r1 = Color.red(colorFrom);
-        int g1 = Color.green(colorFrom);
-        int b1 = Color.blue(colorFrom);
-
-        int r2 = Color.red(colorTo);
-        int g2 = Color.green(colorTo);
-        int b2 = Color.blue(colorTo);
-
-        int r = (int) (r1 + (r2 - r1) * factor);
-        int g = (int) (g1 + (g2 - g1) * factor);
-        int b = (int) (b1 + (b2 - b1) * factor);
-
-        return Color.rgb(r, g, b);
+    public boolean isFading() { return fadeController.isFading(); }
+    public void startFadeEffect() { fadeController.startFadeEffect(); }
+    public void stopFadeEffect() { fadeController.stopFadeEffect(); }
+    public int interpolateColor(int colorFrom, int colorTo) {
+        return fadeController.getInterpolatedColor(colorFrom,colorTo);
     }
 
     public void setOnContentChangeListener(OnContentChangeListener listener) {
@@ -579,76 +530,9 @@ public class PixelDrawView extends View {
         }
         return true;
     }
-    public void startColumnFade() {
-        if (!isPreview || fullTextStates == null) return;
-
-        isColumnFadeRunning = true;
-        isShowingPhase = true;
-        currentColumn = 0;
-
-        // 保存原始文字
-        previewOriginalStates = new int[rows][totalCols];
-        for (int r = 0; r < rows; r++) {
-            System.arraycopy(fullTextStates[r], 0, previewOriginalStates[r], 0, totalCols);
-        }
-
-        // 创建工作数组初始全黑
-        previewWorkingStates = new int[rows][totalCols];
-        for (int r = 0; r < rows; r++) {
-            Arrays.fill(previewWorkingStates[r], 0);
-        }
-
-        invalidate();
-
-        fadeRunnable = new Runnable() {
-            @Override
-            public void run() {
-                if (!isColumnFadeRunning) return;
-
-                if (isShowingPhase) {
-                    if (currentColumn < totalCols) {
-                        for (int r = 0; r < rows; r++) {
-                            previewWorkingStates[r][currentColumn] = previewOriginalStates[r][currentColumn];
-                        }
-                        currentColumn++;
-                    } else {
-                        isShowingPhase = false;
-                        currentColumn = 0;
-                    }
-                } else {
-                    if (currentColumn < totalCols) {
-                        for (int r = 0; r < rows; r++) {
-                            previewWorkingStates[r][currentColumn] = 0;
-                        }
-                        currentColumn++;
-                    } else {
-                        isShowingPhase = true;
-                        currentColumn = 0;
-                    }
-                }
-
-                invalidate();
-                fadeHandler.postDelayed(this, fadeInterval);
-            }
-        };
-
-        fadeHandler.postDelayed(fadeRunnable, fadeInterval);
-    }
-
-
-    public void stopColumnFade() {
-        isColumnFadeRunning = false;
-        fadeHandler.removeCallbacks(fadeRunnable);
-
-        previewWorkingStates = null;
-        invalidate();
-    }
-
-
-
-    public boolean isColumnFadeRunning() {
-        return isColumnFadeRunning;
-    }
-
+    public boolean isColumnFadeRunning() { return columnFadeController.isColumnFadeRunning(); }
+    public void startColumnFade() { columnFadeController.startColumnFade(fullTextStates, totalCols, rows); }
+    public void stopColumnFade() { columnFadeController.stopColumnFade(); }
+    public int[][] getPreviewWorkingStates() { return columnFadeController.getPreviewWorkingStates(); }
 
 }
