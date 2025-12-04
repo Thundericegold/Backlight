@@ -49,8 +49,6 @@ public class PixelDrawView extends View {
     private int mode = MODE_DRAW;
     private boolean editable = true;
     private boolean isPreview = false;
-    private PixelDrawView linkedDrawView = null;
-
     private int previewOffsetX = 0;
     private float previewRotateDegree = 0f;
 
@@ -60,7 +58,8 @@ public class PixelDrawView extends View {
     //动画控制器
     private SplitViewOne fadeController;
     private SplitViewTow columnFadeController;
-
+    //判断文字长度是否超出画布长度
+    private boolean isOutCanvas = false;
 
     public interface OnContentChangeListener {
         void onContentEmpty(boolean isEmpty);
@@ -240,7 +239,7 @@ public class PixelDrawView extends View {
         measure.setTextSize(baseSize);
         float textWidthPx = measure.measureText(text);
         totalCols = Math.max(cols, Math.round(textWidthPx));
-
+        isOutCanvas = Math.round(textWidthPx) > cols ;
         Bitmap tmp = Bitmap.createBitmap(totalCols, rows, Bitmap.Config.ARGB_8888);
         Canvas tmpCanvas = new Canvas(tmp);
         tmpCanvas.drawColor(Color.BLACK);
@@ -294,7 +293,6 @@ public class PixelDrawView extends View {
     @SuppressLint("ClickableViewAccessibility")
     public void setAsPreviewOf(PixelDrawView target) {
         isPreview = true;
-        linkedDrawView = target;
         this.editable = false;
         target.setOnTouchListener((v, e) -> {
             v.onTouchEvent(e);
@@ -534,5 +532,6 @@ public class PixelDrawView extends View {
     public void startColumnFade() { columnFadeController.startColumnFade(fullTextStates, totalCols, rows); }
     public void stopColumnFade() { columnFadeController.stopColumnFade(); }
     public int[][] getPreviewWorkingStates() { return columnFadeController.getPreviewWorkingStates(); }
+    public boolean isOutCanvas(){ return isOutCanvas; }
 
 }

@@ -314,6 +314,7 @@ public class MainActivity extends BaseActivity {
                 if (rbSmall.isChecked()) sizeMode = PixelDrawView.SIZE_SMALL;
                 drawView.drawTextOnGrid(text, sizeMode);
                 previewView.drawTextOnGrid(text, sizeMode);
+                autoMarquee();
             }
         });
         builder.setNegativeButton("取消", (dialog, which) -> dialog.dismiss());
@@ -457,5 +458,13 @@ public class MainActivity extends BaseActivity {
         btnFade.setText("淡入淡出");
         previewView.stopColumnFade();
         btnGradient.setText("开始渐变");
+    }
+    //如果超出画布自动运行跑马灯
+    private void autoMarquee(){
+        if (previewView.isOutCanvas()){
+            startAnimation(() -> previewView.scrollLeft(), 250);
+            isAnimRunning = true;
+            btnMarquee.setText("停止跑马灯");
+        }
     }
 }
