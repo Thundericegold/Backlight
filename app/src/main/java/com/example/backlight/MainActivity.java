@@ -30,6 +30,9 @@ import com.example.backlight.activitys.BaseActivity;
 import com.example.backlight.activitys.PixelDrawView;
 import com.example.backlight.activitys.MarqueeListActivity;
 import com.example.backlight.utils.AnimatedGifEncoder;
+import com.example.backlight.data.AppDatabase;
+import com.example.backlight.data.MarqueeDao;
+import com.example.backlight.data.MarqueeEntity;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -47,7 +50,7 @@ public class MainActivity extends BaseActivity {
     private PixelDrawView previewView;
 
     private Button btnDraw, btnErase, btnClear, btnInput, btnSave, btnSaveMarquee, btnViewSavedMarquee;
-    private Button btnMarquee, btnRotateCW, btnRotateCCW,btnFade,btnGradient;
+    private Button btnMarquee, btnRotateCW, btnRotateCCW, btnFade, btnGradient;
 
     private Handler animHandler = new Handler();
     private Runnable animTask;
@@ -87,12 +90,10 @@ public class MainActivity extends BaseActivity {
             stopAnimation(btnMarquee, "跑马灯");
             drawView.setMode(PixelDrawView.MODE_DRAW);
         });
-
         btnErase.setOnClickListener(v -> {
             stopAnimation(btnMarquee, "跑马灯");
             drawView.setMode(PixelDrawView.MODE_ERASE);
         });
-
         btnClear.setOnClickListener(v -> {
             stopAnimation(btnMarquee, "跑马灯");
             previewView.stopColumnFade();
@@ -100,12 +101,10 @@ public class MainActivity extends BaseActivity {
             previewView.resetAll();
             drawView.setMode(PixelDrawView.MODE_DRAW);
         });
-
         btnInput.setOnClickListener(v -> {
             stopAnimation(btnMarquee, "跑马灯");
             showTextInputDialog();
         });
-
         btnSave.setOnClickListener(v -> {
             stopAnimation(btnMarquee, "跑马灯");
             checkStoragePermission(() -> {
@@ -119,7 +118,6 @@ public class MainActivity extends BaseActivity {
                 }
             });
         });
-
         btnSaveMarquee.setOnClickListener(v -> {
             stopAnimation(btnMarquee, "跑马灯");
             if (previewView != null && previewView.hasFullTextStates()) {
@@ -128,12 +126,10 @@ public class MainActivity extends BaseActivity {
                 Toast.makeText(this, "请先输入文字并在预览区显示", Toast.LENGTH_SHORT).show();
             }
         });
-
         btnViewSavedMarquee.setOnClickListener(v -> {
             stopAnimation(btnMarquee, "跑马灯");
             startActivity(new Intent(MainActivity.this, MarqueeListActivity.class));
         });
-
         btnMarquee.setOnClickListener(v -> {
             if (!isAnimRunning) {
                 startAnimation(() -> previewView.scrollLeft(), 250);
@@ -143,7 +139,6 @@ public class MainActivity extends BaseActivity {
                 stopAnimation(btnMarquee, "跑马灯");
             }
         });
-
         btnRotateCW.setOnClickListener(v -> {
             if (!isAnimRunning) {
                 startAnimation(() -> previewView.addPreviewRotateDegree(5f), 20);
@@ -153,7 +148,6 @@ public class MainActivity extends BaseActivity {
                 stopAnimation(btnRotateCW, "顺时针旋转");
             }
         });
-
         btnRotateCCW.setOnClickListener(v -> {
             if (!isAnimRunning) {
                 startAnimation(() -> previewView.addPreviewRotateDegree(-5f), 20);
@@ -163,36 +157,30 @@ public class MainActivity extends BaseActivity {
                 stopAnimation(btnRotateCCW, "逆时针旋转");
             }
         });
-
         drawView.setOnTouchListener((v, event) -> {
             if (event.getAction() == MotionEvent.ACTION_DOWN || event.getAction() == MotionEvent.ACTION_MOVE) {
                 stopAnimation(btnMarquee, "跑马灯");
             }
             return v.onTouchEvent(event);
         });
-
-        // ===== 新增淡入淡出按钮逻辑 =====
         btnFade.setOnClickListener(v -> {
-            if (previewView.isFading()) { // 如果已经在淡入淡出 → 停止
+            if (previewView.isFading()) {
                 previewView.stopFadeEffect();
                 btnFade.setText("淡入淡出");
                 return;
             }
-            if (!previewView.hasFullTextStates()) { // 没有文字 → 提示
+            if (!previewView.hasFullTextStates()) {
                 Toast.makeText(this, "请输入文字才能使用该特效", Toast.LENGTH_SHORT).show();
                 return;
             }
-            // 启动淡入淡出动画
             previewView.startFadeEffect();
             btnFade.setText("停止淡入淡出");
         });
-
         btnGradient.setOnClickListener(v -> {
             if (!previewView.hasFullTextStates()) {
                 Toast.makeText(this, "预览中没有文字，无法使用该特效", Toast.LENGTH_SHORT).show();
-                return; // 不执行动画
+                return;
             }
-
             if (!previewView.isColumnFadeRunning()) {
                 previewView.startColumnFade();
                 btnGradient.setText("停止渐变");
@@ -201,9 +189,6 @@ public class MainActivity extends BaseActivity {
                 btnGradient.setText("开始渐变");
             }
         });
-
-
-
     }
 
     @Override
@@ -213,7 +198,6 @@ public class MainActivity extends BaseActivity {
         initView();
         initListener();
 
-        // 初始化权限请求器
         permissionLauncher = registerForActivityResult(
                 new ActivityResultContracts.RequestPermission(),
                 isGranted -> {
@@ -356,14 +340,9 @@ public class MainActivity extends BaseActivity {
         builder.show();
     }
 
-    /** 保存 GIF (已适配 Android 6 ~ 13+) **/
     private void saveMarqueeAsGif(String saveName) {
         try {
-            JSONObject jsonObj = new JSONObject();
-            jsonObj.put("name", saveName);
-            jsonObj.put("mode", "marquee");
             JSONArray framesArray = new JSONArray();
-
             int[][] fullStates = previewView.getFullTextStatesCopy();
             int totalCols = previewView.getTotalCols();
             int displayCols = previewView.getCols();
@@ -393,13 +372,12 @@ public class MainActivity extends BaseActivity {
                 framesArray.put(rowSet);
             }
 
-            jsonObj.put("frames", framesArray);
-            String existing = sharedPreferences.getString("saved_marquee_list", "[]");
-            JSONArray listArray = new JSONArray(existing);
-            listArray.put(jsonObj);
-            editor.putString("saved_marquee_list", listArray.toString());
-            editor.apply();
+            // 保存到数据库
+            AppDatabase db = AppDatabase.getInstance(this);
+            MarqueeDao dao = db.marqueeDao();
+            dao.insert(new MarqueeEntity(saveName, "marquee", framesArray.toString(), 250));
 
+            // 保存 GIF 文件
             OutputStream gifOut;
             String saveLocation;
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -430,7 +408,7 @@ public class MainActivity extends BaseActivity {
             gifOut.close();
 
             Toast.makeText(this, "保存成功：" + saveLocation, Toast.LENGTH_LONG).show();
-        } catch (JSONException | IOException e) {
+        } catch (IOException e) {
             e.printStackTrace();
             Toast.makeText(this, "保存失败", Toast.LENGTH_SHORT).show();
         } finally {
@@ -438,7 +416,7 @@ public class MainActivity extends BaseActivity {
         }
     }
 
-    /** 新权限申请逻辑 **/
+    /** 权限申请逻辑 **/
     private void checkStoragePermission(Runnable onGranted) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_IMAGES)
@@ -456,7 +434,6 @@ public class MainActivity extends BaseActivity {
         onGranted.run();
     }
 
-    /** 启动定时动画执行 **/
     private void startAnimation(Runnable action, int intervalMs) {
         animTask = new Runnable() {
             @Override
@@ -468,7 +445,6 @@ public class MainActivity extends BaseActivity {
         animHandler.post(animTask);
     }
 
-    /** 停止动画 **/
     private void stopAnimation(Button btn, String defaultText) {
         animHandler.removeCallbacks(animTask);
         isAnimRunning = false;
@@ -481,7 +457,6 @@ public class MainActivity extends BaseActivity {
         btnErase.setEnabled(!drawView.isEmpty());
     }
 
-    //画布监听方法,画布为空时所有按钮归零，所有状态重置
     public void canvasMonitoring(){
         stopAnimation(btnMarquee, "跑马灯");
         stopAnimation(btnRotateCW, "顺时针旋转");
@@ -491,5 +466,4 @@ public class MainActivity extends BaseActivity {
         previewView.stopColumnFade();
         btnGradient.setText("开始渐变");
     }
-
 }
