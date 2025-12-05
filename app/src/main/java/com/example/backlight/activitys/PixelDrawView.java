@@ -17,6 +17,9 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.graphics.Typeface;
 
+import com.example.backlight.controller.FadeController;
+import com.example.backlight.controller.GradientController;
+
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -57,8 +60,8 @@ public class PixelDrawView extends View {
     private Runnable playRunnable;
     private OnContentChangeListener contentChangeListener;
     //动画控制器
-    private SplitViewOne fadeController;
-    private SplitViewTow columnFadeController;
+    private FadeController fadeController;
+    private GradientController columnFadeController;
     //判断文字长度是否超出画布长度
     private boolean isOutCanvas = false;
 
@@ -85,8 +88,8 @@ public class PixelDrawView extends View {
         whitePaint.setColor(Color.WHITE);
 
         dotCenters = new float[rows][cols][2];
-        fadeController = new SplitViewOne(this);
-        columnFadeController = new SplitViewTow(this);
+        fadeController = new FadeController(this);
+        columnFadeController = new GradientController(this);
     }
 
     @Override

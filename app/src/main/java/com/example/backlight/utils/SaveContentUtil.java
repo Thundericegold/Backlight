@@ -1,4 +1,4 @@
-package com.example.backlight;
+package com.example.backlight.utils;
 
 import android.content.Context;
 import android.graphics.Bitmap;
@@ -8,7 +8,6 @@ import com.example.backlight.activitys.PixelDrawView;
 import com.example.backlight.data.AppDatabase;
 import com.example.backlight.data.MarqueeDao;
 import com.example.backlight.data.MarqueeEntity;
-import com.example.backlight.utils.AnimatedGifEncoder;
 
 import org.json.JSONArray;
 
@@ -22,7 +21,7 @@ import java.util.List;
  * 跑马灯保存处理类
  * 负责生成所有帧 -> 保存GIF文件 -> 保存记录到数据库
  */
-public class SplitMain {
+public class SaveContentUtil {
 
     /** 保存生成结果对象 */
     public static class GifResult {

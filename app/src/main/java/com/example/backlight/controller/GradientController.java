@@ -1,13 +1,16 @@
-package com.example.backlight.activitys;
+package com.example.backlight.controller;
 
 import android.os.Handler;
+
+import com.example.backlight.activitys.PixelDrawView;
+
 import java.util.Arrays;
 
 /**
  * 列渐变动画控制器
  * 控制文字逐列显现和消失的循环特效
  */
-public class SplitViewTow {
+public class GradientController {
     private PixelDrawView view;
     private boolean isColumnFadeRunning = false; // 当前是否正在列渐变
     private boolean isShowingPhase = true;       // true=显现，false=消失
@@ -18,7 +21,7 @@ public class SplitViewTow {
     private int[][] previewOriginalStates;       // 保存原始文字点阵
     private int[][] previewWorkingStates;        // 工作数组（渐变过程显示的状态）
 
-    public SplitViewTow(PixelDrawView view) {
+    public GradientController(PixelDrawView view) {
         this.view = view;
     }
 

@@ -24,6 +24,7 @@ import androidx.core.content.ContextCompat;
 import com.example.backlight.activitys.BaseActivity;
 import com.example.backlight.activitys.MarqueeListActivity;
 import com.example.backlight.activitys.PixelDrawView;
+import com.example.backlight.utils.SaveContentUtil;
 
 import java.io.IOException;
 
@@ -329,9 +330,9 @@ public class MainActivity extends BaseActivity {
 
         new Thread(() -> {
             try {
-                SplitMain.GifResult result =
-                        SplitMain.generateGifFromPreview(MainActivity.this, previewView, saveName, 250);
-                SplitMain.saveMarqueeRecord(MainActivity.this, saveName, result, 250);
+                SaveContentUtil.GifResult result =
+                        SaveContentUtil.generateGifFromPreview(MainActivity.this, previewView, saveName, 250);
+                SaveContentUtil.saveMarqueeRecord(MainActivity.this, saveName, result, 250);
 
                 runOnUiThread(() -> {
                     Toast.makeText(MainActivity.this, "保存完成: " + result.gifPath, Toast.LENGTH_LONG).show();

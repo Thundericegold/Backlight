@@ -1,19 +1,21 @@
-package com.example.backlight.activitys;
+package com.example.backlight.controller;
 
 import android.animation.ValueAnimator;
 import android.graphics.Color;
+
+import com.example.backlight.activitys.PixelDrawView;
 
 /**
  * 淡入淡出动画控制器
  * 用于在 PixelDrawView 中切换白点到黑点的渐变效果
  */
-public class SplitViewOne {
+public class FadeController {
     private PixelDrawView view;   // 主绘图视图
     private ValueAnimator fadeAnimator;  // 控制淡入淡出的动画器
     private float fadeFactor = 1f;       // 淡入淡出插值因子 (1=白色,0=黑色)
     private boolean isFading = false;    // 当前是否在淡入淡出
 
-    public SplitViewOne(PixelDrawView view) {
+    public FadeController(PixelDrawView view) {
         this.view = view;
     }
 
