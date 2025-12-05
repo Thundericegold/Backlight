@@ -93,7 +93,7 @@ public class PixelDrawView extends View {
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
         super.onSizeChanged(w, h, oldw, oldh);
         cellSize = Math.min(w / (cols * 1f), h / (rows * 1f));
-        dotRadius = cellSize * 0.15f;
+        dotRadius = cellSize * 0.4f;
         for (int r = 0; r < rows; r++) {
             for (int c = 0; c < cols; c++) {
                 dotCenters[r][c][0] = cellSize * (c + 0.5f);

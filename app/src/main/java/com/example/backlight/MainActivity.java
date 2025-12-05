@@ -2,16 +2,11 @@ package com.example.backlight;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
-import android.content.ContentValues;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.graphics.Bitmap;
-import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.Environment;
 import android.os.Handler;
-import android.provider.MediaStore;
 import android.text.InputFilter;
 import android.view.MotionEvent;
 import android.widget.Button;
@@ -27,23 +22,10 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.core.content.ContextCompat;
 
 import com.example.backlight.activitys.BaseActivity;
-import com.example.backlight.activitys.PixelDrawView;
 import com.example.backlight.activitys.MarqueeListActivity;
-import com.example.backlight.utils.AnimatedGifEncoder;
-import com.example.backlight.data.AppDatabase;
-import com.example.backlight.data.MarqueeDao;
-import com.example.backlight.data.MarqueeEntity;
+import com.example.backlight.activitys.PixelDrawView;
 
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
-
-import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.OutputStream;
-import java.util.ArrayList;
-import java.util.List;
 
 public class MainActivity extends BaseActivity {
     private PixelDrawView drawView;
@@ -84,7 +66,7 @@ public class MainActivity extends BaseActivity {
         drawView.setOnContentChangeListener(isEmpty -> {
             btnClear.setEnabled(!isEmpty);
             btnErase.setEnabled(!isEmpty);
-            if (isEmpty){
+            if (isEmpty) {
                 canvasMonitoring();
             }
         });
@@ -216,9 +198,7 @@ public class MainActivity extends BaseActivity {
     @Override
     protected void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
-        // 保存当前点阵
         outState.putString("dotStates", arrayToJson(drawView.getDotStatesCopy()));
-        // 如果是文字跑马灯状态，也保存完整文字帧
         if (drawView.hasFullTextStates()) {
             outState.putString("fullTextStates", arrayToJson(drawView.getFullTextStatesCopy()));
             outState.putInt("totalCols", drawView.getTotalCols());
@@ -234,7 +214,7 @@ public class MainActivity extends BaseActivity {
 
         if (dotJson != null) {
             drawView.setDotStates(jsonToArray(dotJson));
-            previewView.setDotStates(jsonToArray(dotJson)); // 同步预览区
+            previewView.setDotStates(jsonToArray(dotJson));
         }
         if (fullJson != null) {
             drawView.setFullTextStates(jsonToArray(fullJson), totalCols);
@@ -243,7 +223,6 @@ public class MainActivity extends BaseActivity {
         disableButton();
     }
 
-    // ======= 工具方法 =======
     private String arrayToJson(int[][] arr) {
         try {
             org.json.JSONArray outer = new org.json.JSONArray();
@@ -345,73 +324,19 @@ public class MainActivity extends BaseActivity {
     }
 
     private void saveMarqueeAsGif(String saveName) {
-        // UI 提示保存开始
         Toast.makeText(this, "正在保存跑马灯，请稍候...", Toast.LENGTH_SHORT).show();
-
         btnSaveMarquee.setEnabled(false);
 
         new Thread(() -> {
             try {
-                JSONArray framesArray = new JSONArray();
-                int[][] fullStates = previewView.getFullTextStatesCopy();
-                int totalCols = previewView.getTotalCols();
-                int displayCols = previewView.getCols();
-                int rows = fullStates.length;
-                int frameCount = totalCols + displayCols;
-                List<Bitmap> gifFrames = new ArrayList<>();
+                SplitMain.GifResult result =
+                        SplitMain.generateGifFromPreview(MainActivity.this, previewView, saveName, 250);
+                SplitMain.saveMarqueeRecord(MainActivity.this, saveName, result, 250);
 
-                // 生成所有帧（这里在子线程做，不会阻塞UI）
-                for (int offset = 0; offset < frameCount; offset++) {
-                    int[][] frame = new int[rows][displayCols];
-                    for (int r = 0; r < rows; r++) {
-                        for (int c = 0; c < displayCols; c++) {
-                            int srcCol = (c + offset) % totalCols;
-                            frame[r][c] = fullStates[r][srcCol];
-                        }
-                    }
-                    Bitmap bmp = previewView.renderFrameToBitmap(frame);
-                    gifFrames.add(bmp);
-
-                    JSONArray rowSet = new JSONArray();
-                    for (int rr = 0; rr < rows; rr++) {
-                        JSONArray rowJson = new JSONArray();
-                        for (int cc = 0; cc < displayCols; cc++) {
-                            rowJson.put(frame[rr][cc]);
-                        }
-                        rowSet.put(rowJson);
-                    }
-                    framesArray.put(rowSet);
-                }
-
-                // 保存到 APP 内部目录
-                File gifDir = new File(getExternalFilesDir(Environment.DIRECTORY_MOVIES), "marquees");
-                if (!gifDir.exists()) gifDir.mkdirs();
-                File gifFile = new File(gifDir, saveName + ".gif");
-                try (OutputStream gifOut = new FileOutputStream(gifFile)) {
-                    AnimatedGifEncoder gifEncoder = new AnimatedGifEncoder();
-                    gifEncoder.start(gifOut);
-                    gifEncoder.setRepeat(0);
-                    gifEncoder.setDelay(250);
-                    for (Bitmap frameBmp : gifFrames) {
-                        gifEncoder.addFrame(frameBmp);
-                        frameBmp.recycle();
-                    }
-                    gifEncoder.finish();
-                }
-
-                // 存到数据库
-                AppDatabase db = AppDatabase.getInstance(MainActivity.this);
-                MarqueeDao dao = db.marqueeDao();
-                dao.insert(new MarqueeEntity(
-                        saveName, "marquee", framesArray.toString(), 250, gifFile.getAbsolutePath()
-                ));
-
-                // 回到UI线程提示完成
                 runOnUiThread(() -> {
-                    Toast.makeText(MainActivity.this, "保存完成: " + gifFile.getAbsolutePath(), Toast.LENGTH_LONG).show();
+                    Toast.makeText(MainActivity.this, "保存完成: " + result.gifPath, Toast.LENGTH_LONG).show();
                     btnSaveMarquee.setEnabled(true);
                 });
-
             } catch (Exception e) {
                 e.printStackTrace();
                 runOnUiThread(() -> {
@@ -422,8 +347,6 @@ public class MainActivity extends BaseActivity {
         }).start();
     }
 
-
-    /** 权限申请逻辑 **/
     private void checkStoragePermission(Runnable onGranted) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_IMAGES)
@@ -459,12 +382,12 @@ public class MainActivity extends BaseActivity {
         previewView.resetOffset();
     }
 
-    private void disableButton(){
+    private void disableButton() {
         btnClear.setEnabled(!drawView.isEmpty());
         btnErase.setEnabled(!drawView.isEmpty());
     }
 
-    public void canvasMonitoring(){
+    public void canvasMonitoring() {
         stopAnimation(btnMarquee, "跑马灯");
         stopAnimation(btnRotateCW, "顺时针旋转");
         stopAnimation(btnRotateCCW, "逆时针旋转");
@@ -473,9 +396,9 @@ public class MainActivity extends BaseActivity {
         previewView.stopColumnFade();
         btnGradient.setText("开始渐变");
     }
-    //如果超出画布自动运行跑马灯
-    private void autoMarquee(){
-        if (previewView.isOutCanvas()){
+
+    private void autoMarquee() {
+        if (previewView.isOutCanvas()) {
             startAnimation(() -> previewView.scrollLeft(), 250);
             isAnimRunning = true;
             btnMarquee.setText("停止跑马灯");
