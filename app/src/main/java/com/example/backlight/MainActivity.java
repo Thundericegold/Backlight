@@ -345,67 +345,81 @@ public class MainActivity extends BaseActivity {
     }
 
     private void saveMarqueeAsGif(String saveName) {
-        try {
-            JSONArray framesArray = new JSONArray();
-            int[][] fullStates = previewView.getFullTextStatesCopy();
-            int totalCols = previewView.getTotalCols();
-            int displayCols = previewView.getCols();
-            int rows = fullStates.length;
-            int frameCount = totalCols + displayCols;
-            List<Bitmap> gifFrames = new ArrayList<>();
+        // UI 提示保存开始
+        Toast.makeText(this, "正在保存跑马灯，请稍候...", Toast.LENGTH_SHORT).show();
 
-            // 生成所有帧
-            for (int offset = 0; offset < frameCount; offset++) {
-                int[][] frame = new int[rows][displayCols];
-                for (int r = 0; r < rows; r++) {
-                    for (int c = 0; c < displayCols; c++) {
-                        int srcCol = (c + offset) % totalCols;
-                        frame[r][c] = fullStates[r][srcCol];
+        btnSaveMarquee.setEnabled(false);
+
+        new Thread(() -> {
+            try {
+                JSONArray framesArray = new JSONArray();
+                int[][] fullStates = previewView.getFullTextStatesCopy();
+                int totalCols = previewView.getTotalCols();
+                int displayCols = previewView.getCols();
+                int rows = fullStates.length;
+                int frameCount = totalCols + displayCols;
+                List<Bitmap> gifFrames = new ArrayList<>();
+
+                // 生成所有帧（这里在子线程做，不会阻塞UI）
+                for (int offset = 0; offset < frameCount; offset++) {
+                    int[][] frame = new int[rows][displayCols];
+                    for (int r = 0; r < rows; r++) {
+                        for (int c = 0; c < displayCols; c++) {
+                            int srcCol = (c + offset) % totalCols;
+                            frame[r][c] = fullStates[r][srcCol];
+                        }
                     }
-                }
-                Bitmap bmp = previewView.renderFrameToBitmap(frame);
-                gifFrames.add(bmp);
+                    Bitmap bmp = previewView.renderFrameToBitmap(frame);
+                    gifFrames.add(bmp);
 
-                JSONArray rowSet = new JSONArray();
-                for (int rr = 0; rr < rows; rr++) {
-                    JSONArray rowJson = new JSONArray();
-                    for (int cc = 0; cc < displayCols; cc++) {
-                        rowJson.put(frame[rr][cc]);
+                    JSONArray rowSet = new JSONArray();
+                    for (int rr = 0; rr < rows; rr++) {
+                        JSONArray rowJson = new JSONArray();
+                        for (int cc = 0; cc < displayCols; cc++) {
+                            rowJson.put(frame[rr][cc]);
+                        }
+                        rowSet.put(rowJson);
                     }
-                    rowSet.put(rowJson);
+                    framesArray.put(rowSet);
                 }
-                framesArray.put(rowSet);
+
+                // 保存到 APP 内部目录
+                File gifDir = new File(getExternalFilesDir(Environment.DIRECTORY_MOVIES), "marquees");
+                if (!gifDir.exists()) gifDir.mkdirs();
+                File gifFile = new File(gifDir, saveName + ".gif");
+                try (OutputStream gifOut = new FileOutputStream(gifFile)) {
+                    AnimatedGifEncoder gifEncoder = new AnimatedGifEncoder();
+                    gifEncoder.start(gifOut);
+                    gifEncoder.setRepeat(0);
+                    gifEncoder.setDelay(250);
+                    for (Bitmap frameBmp : gifFrames) {
+                        gifEncoder.addFrame(frameBmp);
+                        frameBmp.recycle();
+                    }
+                    gifEncoder.finish();
+                }
+
+                // 存到数据库
+                AppDatabase db = AppDatabase.getInstance(MainActivity.this);
+                MarqueeDao dao = db.marqueeDao();
+                dao.insert(new MarqueeEntity(
+                        saveName, "marquee", framesArray.toString(), 250, gifFile.getAbsolutePath()
+                ));
+
+                // 回到UI线程提示完成
+                runOnUiThread(() -> {
+                    Toast.makeText(MainActivity.this, "保存完成: " + gifFile.getAbsolutePath(), Toast.LENGTH_LONG).show();
+                    btnSaveMarquee.setEnabled(true);
+                });
+
+            } catch (Exception e) {
+                e.printStackTrace();
+                runOnUiThread(() -> {
+                    Toast.makeText(MainActivity.this, "保存失败", Toast.LENGTH_SHORT).show();
+                    btnSaveMarquee.setEnabled(true);
+                });
             }
-
-            // ✅ 保存到 APP 内部目录，而不是系统相册
-            File gifDir = new File(getExternalFilesDir(Environment.DIRECTORY_MOVIES), "marquees");
-            if (!gifDir.exists()) gifDir.mkdirs();
-            File gifFile = new File(gifDir, saveName + ".gif");
-            OutputStream gifOut = new FileOutputStream(gifFile);
-
-            AnimatedGifEncoder gifEncoder = new AnimatedGifEncoder();
-            gifEncoder.start(gifOut);
-            gifEncoder.setRepeat(0);
-            gifEncoder.setDelay(250);
-            for (Bitmap frameBmp : gifFrames) {
-                gifEncoder.addFrame(frameBmp);
-                frameBmp.recycle();
-            }
-            gifEncoder.finish();
-            gifOut.close();
-
-            // ✅ 保存到数据库（包含 GIF 路径）
-            AppDatabase db = AppDatabase.getInstance(this);
-            MarqueeDao dao = db.marqueeDao();
-            dao.insert(new MarqueeEntity(saveName, "marquee", framesArray.toString(), 250, gifFile.getAbsolutePath()));
-
-            Toast.makeText(this, "已保存到APP内部: " + gifFile.getAbsolutePath(), Toast.LENGTH_LONG).show();
-        } catch (Exception e) {
-            e.printStackTrace();
-            Toast.makeText(this, "保存失败", Toast.LENGTH_SHORT).show();
-        } finally {
-            btnSaveMarquee.setEnabled(true);
-        }
+        }).start();
     }
 
 
