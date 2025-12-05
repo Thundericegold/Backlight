@@ -15,6 +15,7 @@ import android.provider.MediaStore;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.View;
+import android.graphics.Typeface;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -228,45 +229,73 @@ public class PixelDrawView extends View {
     public void drawTextOnGrid(String text, int sizeMode) {
         clearDots();
         fullTextStates = null;
-        if (text == null || text.isEmpty()) { invalidate(); return; }
+        if (text == null || text.isEmpty()) {
+            invalidate();
+            return;
+        }
 
-        float baseSize;
-        if (sizeMode == SIZE_LARGE) baseSize = rows * 1.2f;
-        else if (sizeMode == SIZE_SMALL) baseSize = rows * 0.8f;
-        else baseSize = rows;
+        // 字号缩放因子
+        float scaleFactor;
+        if (sizeMode == SIZE_LARGE) scaleFactor = 1.4f;
+        else if (sizeMode == SIZE_SMALL) scaleFactor = 0.9f;
+        else scaleFactor = 1.1f;
 
-        Paint measure = new Paint(Paint.ANTI_ALIAS_FLAG);
-        measure.setTextSize(baseSize);
-        float textWidthPx = measure.measureText(text);
-        totalCols = Math.max(cols, Math.round(textWidthPx));
-        isOutCanvas = Math.round(textWidthPx) > cols ;
-        Bitmap tmp = Bitmap.createBitmap(totalCols, rows, Bitmap.Config.ARGB_8888);
-        Canvas tmpCanvas = new Canvas(tmp);
-        tmpCanvas.drawColor(Color.BLACK);
+        // 高分辨率绘制尺寸
+        int highResCols = cols * 10;
+        int highResRows = rows * 10;
+
         Paint textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         textPaint.setColor(Color.WHITE);
-        textPaint.setTextSize(baseSize);
-        Paint.FontMetrics fm = textPaint.getFontMetrics();
-        float textHeight = fm.descent - fm.ascent;
-        tmpCanvas.drawText(text, 0, (rows - textHeight) / 2f - fm.ascent, textPaint);
+        textPaint.setStyle(Paint.Style.FILL);
+        textPaint.setTextSize(highResRows * scaleFactor);
 
+        // ✅ 设置粗体或自定义字体
+        // 系统粗体
+//        textPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
+
+        // 如果你有自定义字体文件（放在 assets/fonts/msyh.ttf）
+         Typeface customTypeface = Typeface.createFromAsset(getContext().getAssets(), "fonts/MiSans-Medium.ttf");
+         textPaint.setTypeface(customTypeface);
+
+        textPaint.setTextAlign(Paint.Align.LEFT);
+
+        float textWidthPx = textPaint.measureText(text);
+        totalCols = Math.max(cols, Math.round(textWidthPx / 10f));
+        isOutCanvas = totalCols > cols;
+
+        // 高分辨率位图绘制
+        Bitmap highResBitmap = Bitmap.createBitmap(totalCols * 10, highResRows, Bitmap.Config.ARGB_8888);
+        Canvas highResCanvas = new Canvas(highResBitmap);
+        highResCanvas.drawColor(Color.BLACK);
+        Paint.FontMetrics fm = textPaint.getFontMetrics();
+        float baseline = (highResRows - (fm.descent - fm.ascent)) / 2f - fm.ascent;
+        highResCanvas.drawText(text, 0, baseline, textPaint);
+
+        // 采样成点阵
         fullTextStates = new int[rows][totalCols];
         for (int r = 0; r < rows; r++) {
             for (int c = 0; c < totalCols; c++) {
-                int color = tmp.getPixel(c, r);
+                int px = c * 10 + 5;
+                int py = r * 10 + 5;
+                int color = highResBitmap.getPixel(px, py);
                 fullTextStates[r][c] = (Color.red(color) > 128) ? 1 : 0;
             }
         }
+        highResBitmap.recycle();
 
+        // 显示到当前网格
         displayStartCol = totalCols > cols ? (totalCols - cols) / 2 : 0;
         for (int r = 0; r < rows; r++) {
             for (int c = 0; c < cols; c++) {
                 dotStates[r][c] = fullTextStates[r][Math.min(displayStartCol + c, totalCols - 1)];
             }
         }
+
         invalidate();
         updateAfterDraw();
     }
+
+
 
     public void setMode(int m) { mode = m; }
     public boolean hasFullTextStates() { return fullTextStates != null; }
