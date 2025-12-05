@@ -14,6 +14,8 @@ import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.RadioButton;
 import android.widget.RadioGroup;
+import android.widget.SeekBar;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
@@ -24,6 +26,7 @@ import androidx.core.content.ContextCompat;
 import com.example.backlight.activitys.BaseActivity;
 import com.example.backlight.activitys.MarqueeListActivity;
 import com.example.backlight.activitys.PixelDrawView;
+import com.example.backlight.controller.MarqueeSpeedController;
 import com.example.backlight.utils.SaveContentUtil;
 
 import java.io.IOException;
@@ -31,7 +34,10 @@ import java.io.IOException;
 public class MainActivity extends BaseActivity {
     private PixelDrawView drawView;
     private PixelDrawView previewView;
+    private SeekBar seekBarMarquee;
+    private TextView tvMarqueeSpeed;
 
+    private MarqueeSpeedController speedController;
     private Button btnDraw, btnErase, btnClear, btnInput, btnSave, btnSaveMarquee, btnViewSavedMarquee;
     private Button btnMarquee, btnRotateCW, btnRotateCCW, btnFade, btnGradient;
 
@@ -58,6 +64,9 @@ public class MainActivity extends BaseActivity {
         btnRotateCCW = findViewById(R.id.btnRotateCCW);
         btnFade = findViewById(R.id.btnFade);
         btnGradient = findViewById(R.id.btnGradient);
+        seekBarMarquee = findViewById(R.id.seekBarMarquee);
+        tvMarqueeSpeed = findViewById(R.id.tvMarqueeSpeed);
+        speedController = new MarqueeSpeedController(seekBarMarquee, tvMarqueeSpeed);
         disableButton();
     }
 
@@ -174,6 +183,13 @@ public class MainActivity extends BaseActivity {
                 btnGradient.setText("开始渐变");
             }
         });
+        speedController.setOnSpeedChangeListener(
+                speedMs -> {
+                    if (isAnimRunning) {
+                        updateAnimationSpeed(speedMs);
+                    }
+                }
+        );
     }
 
     @Override
@@ -405,4 +421,14 @@ public class MainActivity extends BaseActivity {
             btnMarquee.setText("停止跑马灯");
         }
     }
+
+    //更新速度方法
+    private void updateAnimationSpeed(int newSpeedMs) {
+        animHandler.removeCallbacks(animTask); // 停掉旧的间隔
+        startAnimation(() -> {
+            previewView.scrollLeft();
+            previewView.invalidate();
+        }, newSpeedMs);
+    }
+
 }
