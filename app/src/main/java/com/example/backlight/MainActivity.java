@@ -43,6 +43,8 @@ public class MainActivity extends BaseActivity {
 
     private Handler animHandler = new Handler();
     private Runnable animTask;
+
+    private int animType=0;//跑马灯：0，顺时针旋转：1，逆时针旋转：2
     private boolean isAnimRunning = false;
 
     // 权限请求器
@@ -66,7 +68,6 @@ public class MainActivity extends BaseActivity {
         btnGradient = findViewById(R.id.btnGradient);
         seekBarMarquee = findViewById(R.id.seekBarMarquee);
         tvMarqueeSpeed = findViewById(R.id.tvMarqueeSpeed);
-        speedController = new MarqueeSpeedController(seekBarMarquee, tvMarqueeSpeed);
         disableButton();
     }
 
@@ -128,6 +129,7 @@ public class MainActivity extends BaseActivity {
             if (!isAnimRunning) {
                 startAnimation(() -> previewView.scrollLeft(), 250);
                 isAnimRunning = true;
+                animType=1;
                 btnMarquee.setText("停止跑马灯");
             } else {
                 stopAnimation(btnMarquee, "跑马灯");
@@ -137,6 +139,7 @@ public class MainActivity extends BaseActivity {
             if (!isAnimRunning) {
                 startAnimation(() -> previewView.addPreviewRotateDegree(5f), 20);
                 isAnimRunning = true;
+                animType=2;
                 btnRotateCW.setText("停止旋转");
             } else {
                 stopAnimation(btnRotateCW, "顺时针旋转");
@@ -146,6 +149,7 @@ public class MainActivity extends BaseActivity {
             if (!isAnimRunning) {
                 startAnimation(() -> previewView.addPreviewRotateDegree(-5f), 20);
                 isAnimRunning = true;
+                animType=3;
                 btnRotateCCW.setText("停止旋转");
             } else {
                 stopAnimation(btnRotateCCW, "逆时针旋转");
@@ -183,6 +187,7 @@ public class MainActivity extends BaseActivity {
                 btnGradient.setText("开始渐变");
             }
         });
+        speedController = new MarqueeSpeedController(seekBarMarquee, tvMarqueeSpeed,animType);
         speedController.setOnSpeedChangeListener(
                 speedMs -> {
                     if (isAnimRunning) {
@@ -395,6 +400,7 @@ public class MainActivity extends BaseActivity {
     private void stopAnimation(Button btn, String defaultText) {
         animHandler.removeCallbacks(animTask);
         isAnimRunning = false;
+        animType=0;
         btn.setText(defaultText);
         previewView.resetOffset();
     }
@@ -425,10 +431,24 @@ public class MainActivity extends BaseActivity {
     //更新速度方法
     private void updateAnimationSpeed(int newSpeedMs) {
         animHandler.removeCallbacks(animTask); // 停掉旧的间隔
-        startAnimation(() -> {
-            previewView.scrollLeft();
-            previewView.invalidate();
-        }, newSpeedMs);
+        if (animType==1){
+            startAnimation(() -> {
+                previewView.scrollLeft();
+                previewView.invalidate();
+            }, newSpeedMs);
+        }
+        if (animType==2){
+            startAnimation(() -> {
+                previewView.addPreviewRotateDegree(5f);
+                previewView.invalidate();
+            }, newSpeedMs);
+        }
+        if (animType==3){
+            startAnimation(() -> {
+                previewView.addPreviewRotateDegree(-5f);
+                previewView.invalidate();
+            }, newSpeedMs);
+        }
     }
 
 }

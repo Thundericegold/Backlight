@@ -128,7 +128,19 @@
                 style="@style/CustomRoundedButton"
                 android:visibility="visible"
                 android:text="跑马灯" />
-            <!-- 跑马灯速度调节 -->
+            <Button
+                android:id="@+id/btnRotateCW"
+                style="@style/CustomRoundedButton"
+                android:visibility="visible"
+                android:text="顺时针旋转" />
+
+            <Button
+                android:id="@+id/btnRotateCCW"
+                style="@style/CustomRoundedButton"
+                android:visibility="visible"
+                android:text="逆时针旋转" />
+
+            <!-- 速度调节 -->
             <TextView
                 android:id="@+id/tvMarqueeSpeed"
                 android:layout_width="wrap_content"
@@ -145,19 +157,6 @@
                 android:progress="10"
                 android:layout_marginBottom="12dp"/>
 
-
-
-            <Button
-                android:id="@+id/btnRotateCW"
-                style="@style/CustomRoundedButton"
-                android:visibility="visible"
-                android:text="顺时针旋转" />
-
-            <Button
-                android:id="@+id/btnRotateCCW"
-                style="@style/CustomRoundedButton"
-                android:visibility="visible"
-                android:text="逆时针旋转" />
             <Button
                 android:id="@+id/btnFade"
                 style="@style/CustomRoundedButton"
