@@ -26,7 +26,7 @@ import androidx.core.content.ContextCompat;
 import com.example.backlight.activitys.BaseActivity;
 import com.example.backlight.activitys.MarqueeListActivity;
 import com.example.backlight.activitys.PixelDrawView;
-import com.example.backlight.controller.MarqueeSpeedController;
+import com.example.backlight.controller.SpeedController;
 import com.example.backlight.utils.SaveContentUtil;
 
 import java.io.IOException;
@@ -37,7 +37,7 @@ public class MainActivity extends BaseActivity {
     private SeekBar seekBarMarquee;
     private TextView tvMarqueeSpeed;
 
-    private MarqueeSpeedController speedController;
+    private SpeedController speedController;
     private Button btnDraw, btnErase, btnClear, btnInput, btnSave, btnSaveMarquee, btnViewSavedMarquee;
     private Button btnMarquee, btnRotateCW, btnRotateCCW, btnFade, btnGradient;
 
@@ -68,6 +68,7 @@ public class MainActivity extends BaseActivity {
         btnGradient = findViewById(R.id.btnGradient);
         seekBarMarquee = findViewById(R.id.seekBarMarquee);
         tvMarqueeSpeed = findViewById(R.id.tvMarqueeSpeed);
+        speedController = new SpeedController(seekBarMarquee, tvMarqueeSpeed,animType);
         disableButton();
     }
 
@@ -187,7 +188,6 @@ public class MainActivity extends BaseActivity {
                 btnGradient.setText("开始渐变");
             }
         });
-        speedController = new MarqueeSpeedController(seekBarMarquee, tvMarqueeSpeed,animType);
         speedController.setOnSpeedChangeListener(
                 speedMs -> {
                     if (isAnimRunning) {
@@ -432,18 +432,21 @@ public class MainActivity extends BaseActivity {
     private void updateAnimationSpeed(int newSpeedMs) {
         animHandler.removeCallbacks(animTask); // 停掉旧的间隔
         if (animType==1){
+            speedController.setMode(1);
             startAnimation(() -> {
                 previewView.scrollLeft();
                 previewView.invalidate();
             }, newSpeedMs);
         }
         if (animType==2){
+            speedController.setMode(2);
             startAnimation(() -> {
                 previewView.addPreviewRotateDegree(5f);
                 previewView.invalidate();
             }, newSpeedMs);
         }
         if (animType==3){
+            speedController.setMode(3);
             startAnimation(() -> {
                 previewView.addPreviewRotateDegree(-5f);
                 previewView.invalidate();
